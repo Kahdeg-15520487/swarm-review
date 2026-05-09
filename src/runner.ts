@@ -8,9 +8,11 @@ import { QUALITY_PROMPT } from "./prompts/quality.js";
 import { createReviewerSession, runSession } from "./session.js";
 import type {
   DiffResult,
+  Finding,
   ReviewCategory,
   ReviewerResult,
   ResolvedConfig,
+  Severity,
 } from "./types.js";
 
 function buildReviewerPrompt(
@@ -98,9 +100,14 @@ export async function runReviewers(
           thinkingLevel: config.thinkingLevel,
         });
 
-        const { usage } = await runSession(session, prompt, config.reviewerTimeout, signal);
+        const { output, usage } = await runSession(session, prompt, config.reviewerTimeout, signal);
 
-        const findings = getFindings();
+        let findings = getFindings();
+
+        // Fallback: parse text output for XML findings when model doesn't use the tool
+        if (findings.length === 0) {
+          findings = parseTextFindings(output, category);
+        }
 
         session.dispose();
 
@@ -125,4 +132,41 @@ export async function runReviewers(
   );
 
   return results;
+}
+
+function parseTextFindings(text: string, category: ReviewCategory): Finding[] {
+  const findings: Finding[] = [];
+  const findingRegex = /<finding\s+severity="(critical|warning|suggestion)"\s+category="(?:security|performance|quality)">([\s\S]*?)<\/finding>/gi;
+  let match;
+
+  while ((match = findingRegex.exec(text)) !== null) {
+    const severity = match[1] as Severity;
+    const body = match[2];
+
+    const titleMatch = body.match(/<title>([\s\S]*?)<\/title>/i);
+    const fileMatch = body.match(/<file>([\s\S]*?)<\/file>/i);
+    const descMatch = body.match(/<description>([\s\S]*?)<\/description>/i);
+    const recMatch = body.match(/<recommendation>([\s\S]*?)<\/recommendation>/i);
+    const snippetMatch = body.match(/<codeSnippet>([\s\S]*?)<\/codeSnippet>/i);
+
+    if (titleMatch && descMatch && fileMatch) {
+      const filePart = fileMatch[1].trim();
+      const colonIdx = filePart.lastIndexOf(":");
+      const file = colonIdx > 0 ? filePart.slice(0, colonIdx) : filePart;
+      const line = colonIdx > 0 ? parseInt(filePart.slice(colonIdx + 1), 10) : undefined;
+
+      findings.push({
+        severity,
+        category,
+        title: titleMatch[1].trim(),
+        description: descMatch[1].trim(),
+        file,
+        line: line && !isNaN(line) ? line : undefined,
+        codeSnippet: snippetMatch?.[1]?.trim(),
+        recommendation: recMatch?.[1]?.trim() ?? "",
+      });
+    }
+  }
+
+  return findings;
 }
