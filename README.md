@@ -71,18 +71,48 @@ console.log(result.totalUsage); // { inputTokens, outputTokens, cost }
 
 ## CI/CD Integration
 
+### Quick setup
+
+1. Add `DEEPSEEK_API_KEY` to your repo secrets (**Settings → Secrets and variables → Actions**)
+2. Copy `.github/workflows/ci.yml` into your repo
+3. (Optional) Enable branch protection: require the `review` job to pass before merging
+
+### What the workflow does
+
+- On every PR to `master`: builds, typechecks, then runs swarm-review
+- Posts the review as a PR comment with verdict
+- Fails the check if verdict is `significant_concerns` (exit code 2)
+
+### Minimal workflow
+
 ```yaml
-# GitHub Actions example
-- name: Swarm Review
-  run: |
-    npx swarm-review \
-      --diff ${{ github.event.pull_request.base.sha }}...${{ github.sha }} \
-      --format json \
-      --output review.json \
-      --model deepseek-v4-flash \
-      --provider deepseek
-  env:
-    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install -g swarm-review
+      - run: |
+          swarm-review \
+            --diff ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
+            --format markdown \
+            --model deepseek-v4-flash \
+            --provider deepseek \
+            --no-color \
+            > review.md
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
 Exit codes: `0` = approved, `1` = minor issues, `2` = significant concerns.
