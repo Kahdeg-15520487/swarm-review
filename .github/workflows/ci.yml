@@ -48,11 +48,20 @@ jobs:
             --format markdown \
             --model deepseek-v4-flash \
             --provider deepseek \
+            --session-log review-trace.jsonl \
             --no-color \
             > review-output.md 2>review-stderr.txt
           echo "exit_code=$?" >> "$GITHUB_OUTPUT"
           set -e
           cat review-stderr.txt
+
+      - name: Upload session trace
+        if: always() && hashFiles('review-trace.jsonl') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-trace
+          path: review-trace.jsonl
+          retention-days: 30
 
       - name: Post review comment
         if: always()
@@ -60,7 +69,6 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -s review-output.md ]; then
-            # Add verdict header based on exit code
             EXIT_CODE="${{ steps.review.outputs.exit_code }}"
             if [ "$EXIT_CODE" = "0" ]; then
               HEADER="## ✅ Swarm Review — Approved"
@@ -76,6 +84,19 @@ jobs:
               echo "$HEADER"
               echo ""
               cat review-output.md
+
+              # Attach session trace as collapsible details
+              if [ -s review-trace.jsonl ]; then
+                echo ""
+                echo "<details>"
+                echo "<summary>Session Trace (JSONL)</summary>"
+                echo ""
+                echo '```'
+                cat review-trace.jsonl
+                echo '```'
+                echo "</details>"
+              fi
+
               echo ""
               echo "---"
               echo "<sub>Triggered by commit \`${{ github.sha }}\`</sub>"
