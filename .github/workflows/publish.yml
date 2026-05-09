@@ -9,6 +9,7 @@ jobs:
     name: Publish to npm
     runs-on: ubuntu-latest
     permissions:
+      id-token: write
       contents: read
     steps:
       - uses: actions/checkout@v4
@@ -19,5 +20,3 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
