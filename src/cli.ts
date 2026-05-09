@@ -63,6 +63,9 @@ function parseCliArgs(): ReviewConfig & { help?: boolean } {
       case "-o":
         config.outputFile = next();
         break;
+      case "--session-log":
+        config.sessionLog = next();
+        break;
       case "--timeout":
         config.reviewerTimeout = parseInt(next(), 10);
         break;
@@ -115,6 +118,7 @@ OPTIONS:
   --concurrency <n>      Max concurrent reviewers (default: 3)
   --instructions <text>  Custom instructions for all reviewers
   --thinking-level <lvl> LLM thinking level: off, low, medium, high (default: medium)
+  --session-log <file>   Write full session trace as JSONL
   --no-color             Disable colored output
 
 EXAMPLES:

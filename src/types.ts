@@ -48,6 +48,7 @@ export interface ReviewerResult {
   usage: TokenUsage;
   durationMs: number;
   error?: string;
+  events?: any[];
 }
 
 export interface TokenUsage {
@@ -66,48 +67,28 @@ export interface ReviewResult {
   totalUsage: TokenUsage;
   durationMs: number;
   config: ResolvedConfig;
+  coordinatorEvents?: any[];
 }
 export interface ReviewConfig {
-  /** Working directory (git repo root). Default: process.cwd() */
   cwd?: string;
-
-  /** Diff source. Can be a git ref range ("HEAD~1", "main...HEAD"), "staged", "unstaged", or raw diff string */
   diff?: string;
-
-  /** Model for reviewers. Default: auto-select first available */
   model?: string;
-
-  /** Model provider. Default: auto-detect */
   provider?: string;
-
-  /** Override which reviewers to run. Default: based on risk tier */
   reviewers?: ReviewCategory[];
-
-  /** Override risk tier. Default: auto-assess from diff */
   riskTier?: RiskTier;
-
-  /** Output format. Default: "text" */
   format?: OutputFormat;
-
-  /** Write output to file instead of stdout */
   outputFile?: string;
-
-  /** Per-reviewer timeout in milliseconds. Default: 300000 (5 min) */
   reviewerTimeout?: number;
-
-  /** Maximum concurrent reviewers. Default: 3 */
   maxConcurrency?: number;
-
-  /** Custom instructions appended to all reviewer prompts */
   customInstructions?: string;
-
-  /** Thinker level for LLM. Default: "medium" */
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high";
-
-  /** Whether to use color in text output. Default: true if tty */
   color?: boolean;
+
+  /** Write full session trace (events, tool calls, thinking, tokens) as JSONL */
+  sessionLog?: string;
 }
 
-export interface ResolvedConfig extends Required<Omit<ReviewConfig, 'outputFile'>> {
+export interface ResolvedConfig extends Required<Omit<ReviewConfig, 'outputFile' | 'sessionLog'>> {
   outputFile?: string;
+  sessionLog?: string;
 }

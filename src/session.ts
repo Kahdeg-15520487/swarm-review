@@ -1,5 +1,5 @@
 import { Agent } from "@earendil-works/pi-agent-core";
-import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { Finding, Severity, ReviewCategory, TokenUsage } from "./types.js";
@@ -165,7 +165,7 @@ export async function runSession(
   prompt: string,
   timeoutMs: number,
   signal?: AbortSignal,
-): Promise<{ output: string; usage: TokenUsage }> {
+): Promise<{ output: string; usage: TokenUsage; events: AgentEvent[] }> {
   const output: string[] = [];
   const usage: TokenUsage = {
     inputTokens: 0,
@@ -174,8 +174,11 @@ export async function runSession(
     cacheWriteTokens: 0,
     cost: 0,
   };
+  const events: AgentEvent[] = [];
 
   const unsubscribe = agent.subscribe((event) => {
+    events.push(event);
+
     if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
       output.push(event.assistantMessageEvent.delta);
     }
@@ -205,5 +208,5 @@ export async function runSession(
     unsubscribe();
   }
 
-  return { output: output.join(""), usage };
+  return { output: output.join(""), usage, events };
 }
