@@ -86,15 +86,15 @@ function writeSessionLog(
 
   for (const r of reviewerResults) {
     if (r.events) {
-      for (const event of r.events) {
-        try { lines.push(JSON.stringify({ source: r.reviewer, ...serializeEvent(event) })); } catch {}
+      for (const entry of consolidateEvents(r.events)) {
+        try { lines.push(JSON.stringify({ source: r.reviewer, ...entry })); } catch {}
       }
     }
   }
 
   if (coordinatorResult.coordinatorEvents) {
-    for (const event of coordinatorResult.coordinatorEvents) {
-      try { lines.push(JSON.stringify({ source: "coordinator", ...serializeEvent(event) })); } catch {}
+    for (const entry of consolidateEvents(coordinatorResult.coordinatorEvents)) {
+      try { lines.push(JSON.stringify({ source: "coordinator", ...entry })); } catch {}
     }
   }
 
@@ -105,38 +105,107 @@ function writeSessionLog(
   }
 }
 
-function serializeEvent(event: AgentEvent): object {
-  const safe: any = { type: event.type };
+/**
+ * Consolidate raw AgentEvent stream into concise, loggable entries.
+ *
+ * Instead of logging every message_update delta individually (thousands per turn),
+ * we buffer thinking/text deltas within each turn and emit a single consolidated
+ * entry when the turn ends.
+ */
+function consolidateEvents(events: AgentEvent[]): object[] {
+  const out: object[] = [];
+  let thinking = "";
+  let text = "";
+  let hasDeltas = false;
 
-  for (const [key, value] of Object.entries(event)) {
-    if (key === "type") continue;
-    if (typeof value === "function") continue;
+  for (const event of events) {
+    switch (event.type) {
+      case "agent_start":
+        out.push({ type: "agent_start" });
+        break;
 
-    // Strip full message objects from high-frequency events — they're redundant
-    // and can be megabytes per event. Keep only the event metadata.
-    if (key === "message" && (event.type === "message_start" || event.type === "message_end" || event.type === "message_update")) {
-      const msg = value as any;
-      safe[key] = msg.role ? { role: msg.role } : {};
-      continue;
-    }
-    if (key === "assistantMessageEvent") {
-      const ame = value as any;
-      safe[key] = ame.type ? { type: ame.type } : {};
-      continue;
-    }
+      case "agent_end":
+        out.push({ type: "agent_end" });
+        break;
 
-    if (value instanceof Uint8Array) { safe[key] = `[Buffer ${value.length}b]`; continue; }
-    try {
-      const json = JSON.stringify(value);
-      if (json.length > 10000) {
-        safe[key] = json.slice(0, 10000) + `... [truncated ${json.length} chars]`;
-      } else {
-        safe[key] = value;
+      case "turn_start":
+        thinking = "";
+        text = "";
+        hasDeltas = false;
+        out.push({ type: "turn_start" });
+        break;
+
+      case "message_update": {
+        const ame = (event as any).assistantMessageEvent;
+        if (ame?.type === "thinking_delta" && ame.delta) {
+          thinking += ame.delta;
+          hasDeltas = true;
+        } else if (ame?.type === "text_delta" && ame.delta) {
+          text += ame.delta;
+          hasDeltas = true;
+        }
+        break;
       }
-    } catch {
-      safe[key] = String(value);
+
+      case "turn_end": {
+        if (hasDeltas) {
+          const entry: any = { type: "turn_output" };
+          if (thinking) entry.thinking = thinking;
+          if (text) entry.text = text;
+          out.push(entry);
+        }
+
+        const msg = (event as any).message;
+        if (msg?.usage) {
+          out.push({
+            type: "usage",
+            input: msg.usage.input ?? 0,
+            output: msg.usage.output ?? 0,
+            cacheRead: msg.usage.cacheRead ?? 0,
+            cacheWrite: msg.usage.cacheWrite ?? 0,
+          });
+        }
+
+        const toolResults = (event as any).toolResults;
+        if (toolResults?.length) {
+          out.push({ type: "tool_results", count: toolResults.length });
+        }
+        break;
+      }
+
+      case "tool_execution_start":
+        out.push({
+          type: "tool_call",
+          tool: (event as any).toolName,
+          args: truncate((event as any).args, 2000),
+        });
+        break;
+
+      case "tool_execution_end":
+        out.push({
+          type: "tool_result",
+          tool: (event as any).toolName,
+          isError: (event as any).isError,
+          result: truncate((event as any).result, 2000),
+        });
+        break;
+
+      default:
+        out.push({ type: event.type, raw: true });
+        break;
     }
   }
 
-  return safe;
+  return out;
+}
+
+function truncate(value: any, maxChars: number): any {
+  if (value === undefined || value === null) return value;
+  try {
+    const json = JSON.stringify(value);
+    if (json.length <= maxChars) return value;
+    return json.slice(0, maxChars) + `... [truncated ${json.length} chars]`;
+  } catch {
+    return String(value);
+  }
 }
