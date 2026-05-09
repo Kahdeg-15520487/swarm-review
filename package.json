@@ -21,7 +21,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "latest",
+    "@earendil-works/pi-agent-core": "latest",
     "@earendil-works/pi-ai": "latest",
     "typebox": "latest",
     "simple-git": "latest"

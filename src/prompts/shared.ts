@@ -1,24 +1,9 @@
-/**
- * Shared rules appended to every reviewer's system prompt.
- * These enforce structured output format and common boundaries.
- */
-
 export const SHARED_RULES = `## Mandatory Output Rules
 
-Report your findings using the report_finding tool. Call it once for each finding.
+You MUST report your findings using the report_finding tool. Call it once for each finding.
+Do NOT write findings as plain text — only use the tool.
 
-If the tool is not available, output your findings as structured XML:
-
-<findings>
-<finding severity="critical|warning|suggestion" category="security|performance|quality">
-  <title>Short title</title>
-  <file>path/to/file.ts:42</file>
-  <description>Detailed description</description>
-  <recommendation>How to fix</recommendation>
-</finding>
-</findings>
-
-If you find no issues, respond with "No issues found."
+If you find no issues, simply respond with "No issues found." and do not call the tool.
 
 ## Shared Rules for All Reviewers
 

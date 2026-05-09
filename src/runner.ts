@@ -1,18 +1,12 @@
-/**
- * Spawns specialized reviewer sessions concurrently and collects findings.
- */
-
 import { SECURITY_PROMPT } from "./prompts/security.js";
 import { PERFORMANCE_PROMPT } from "./prompts/performance.js";
 import { QUALITY_PROMPT } from "./prompts/quality.js";
 import { createReviewerSession, runSession } from "./session.js";
 import type {
   DiffResult,
-  Finding,
   ReviewCategory,
   ReviewerResult,
   ResolvedConfig,
-  Severity,
 } from "./types.js";
 
 function buildReviewerPrompt(
@@ -76,12 +70,23 @@ async function mapWithConcurrency<TIn, TOut>(
   return results;
 }
 
+// Build a getApiKey function from environment variables
+function buildGetApiKey(config: ResolvedConfig): (provider: string) => string | undefined {
+  return (provider: string) => {
+    const envKey = `${provider.toUpperCase()}_API_KEY`;
+    const key = process.env[envKey];
+    return key || undefined;
+  };
+}
+
 export async function runReviewers(
   categories: ReviewCategory[],
   diffResult: DiffResult,
   config: ResolvedConfig,
   signal?: AbortSignal,
 ): Promise<ReviewerResult[]> {
+  const getApiKey = buildGetApiKey(config);
+
   const results = await mapWithConcurrency(
     categories,
     config.maxConcurrency,
@@ -91,25 +96,18 @@ export async function runReviewers(
       const prompt = buildReviewerPrompt(category, diffResult, config);
 
       try {
-        const { session, getFindings, model } = await createReviewerSession({
+        const { agent, getFindings, model } = await createReviewerSession({
           systemPrompt,
           category,
-          cwd: config.cwd,
-          model: config.model || undefined,
-          provider: config.provider || undefined,
+          model: config.model,
+          provider: config.provider,
+          getApiKey,
           thinkingLevel: config.thinkingLevel,
         });
 
-        const { output, usage } = await runSession(session, prompt, config.reviewerTimeout, signal);
+        const { usage } = await runSession(agent, prompt, config.reviewerTimeout, signal);
 
-        let findings = getFindings();
-
-        // Fallback: parse text output for XML findings when model doesn't use the tool
-        if (findings.length === 0) {
-          findings = parseTextFindings(output, category);
-        }
-
-        session.dispose();
+        const findings = getFindings();
 
         return {
           reviewer: category,
@@ -132,41 +130,4 @@ export async function runReviewers(
   );
 
   return results;
-}
-
-function parseTextFindings(text: string, category: ReviewCategory): Finding[] {
-  const findings: Finding[] = [];
-  const findingRegex = /<finding\s+severity="(critical|warning|suggestion)"\s+category="(?:security|performance|quality)">([\s\S]*?)<\/finding>/gi;
-  let match;
-
-  while ((match = findingRegex.exec(text)) !== null) {
-    const severity = match[1] as Severity;
-    const body = match[2];
-
-    const titleMatch = body.match(/<title>([\s\S]*?)<\/title>/i);
-    const fileMatch = body.match(/<file>([\s\S]*?)<\/file>/i);
-    const descMatch = body.match(/<description>([\s\S]*?)<\/description>/i);
-    const recMatch = body.match(/<recommendation>([\s\S]*?)<\/recommendation>/i);
-    const snippetMatch = body.match(/<codeSnippet>([\s\S]*?)<\/codeSnippet>/i);
-
-    if (titleMatch && descMatch && fileMatch) {
-      const filePart = fileMatch[1].trim();
-      const colonIdx = filePart.lastIndexOf(":");
-      const file = colonIdx > 0 ? filePart.slice(0, colonIdx) : filePart;
-      const line = colonIdx > 0 ? parseInt(filePart.slice(colonIdx + 1), 10) : undefined;
-
-      findings.push({
-        severity,
-        category,
-        title: titleMatch[1].trim(),
-        description: descMatch[1].trim(),
-        file,
-        line: line && !isNaN(line) ? line : undefined,
-        codeSnippet: snippetMatch?.[1]?.trim(),
-        recommendation: recMatch?.[1]?.trim() ?? "",
-      });
-    }
-  }
-
-  return findings;
 }

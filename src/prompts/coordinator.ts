@@ -49,22 +49,7 @@ When in doubt about a finding, use your tools to READ the source code and verify
 
 ## Output
 
-Call the submit_review tool ONCE with the final consolidated review.
-
-If the tool is not available, output your review as structured XML:
-
-<review>
-<verdict>approved|approved_with_comments|minor_issues|significant_concerns</verdict>
-<summary>Your 2-4 sentence summary here.</summary>
-<findings>
-<finding severity="critical|warning|suggestion" category="security|performance|quality">
-  <title>Short title</title>
-  <file>path/to/file.ts:42</file>
-  <description>Detailed description</description>
-  <recommendation>How to fix</recommendation>
-</finding>
-</findings>
-</review>
+Call the submit_review tool ONCE with the final consolidated review. This is your most important action.
 
 ${SHARED_RULES}
 `;
