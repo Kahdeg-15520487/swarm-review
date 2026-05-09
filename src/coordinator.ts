@@ -1,5 +1,6 @@
 import { COORDINATOR_PROMPT } from "./prompts/coordinator.js";
 import { createReviewerSession, runSession } from "./session.js";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { ReviewerResult, ReviewResult, ResolvedConfig, DiffResult, RiskTier, Verdict } from "./types.js";
 
 function buildCoordinatorPrompt(
@@ -56,6 +57,10 @@ ${findingsXml}
   return prompt;
 }
 
+export interface CoordinatorResult extends ReviewResult {
+  coordinatorEvents?: AgentEvent[];
+}
+
 export async function runCoordinator(
   reviewerResults: ReviewerResult[],
   diffResult: DiffResult,
@@ -91,7 +96,7 @@ export async function runCoordinator(
     });
 
     const coordinatorTimeout = config.reviewerTimeout * 2;
-    const { usage: coordinatorUsage } = await runSession(
+    const { usage: coordinatorUsage, events: coordinatorEvents } = await runSession(
       agent,
       prompt,
       coordinatorTimeout,
@@ -117,6 +122,7 @@ export async function runCoordinator(
       totalUsage,
       durationMs: Date.now() - startTime,
       config,
+      coordinatorEvents,
     };
   } catch (err: any) {
     return {

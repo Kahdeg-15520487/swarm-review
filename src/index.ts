@@ -2,21 +2,18 @@
  * swarm-review — Swarm Review
  *
  * Library API. Import and call review() from any script.
- *
- * Usage:
- *   import { review } from "swarm-review";
- *   const result = await review({ cwd: "./my-project", diff: "main...HEAD" });
- *   console.log(result.verdict);
  */
 
 import { resolveConfig } from "./config.js";
 import { getDiff } from "./diff/git.js";
 import { filterDiff } from "./diff/filter.js";
 import { assessRiskTier } from "./diff/risk.js";
-import { runReviewers } from "./runner.js";
-import { runCoordinator } from "./coordinator.js";
+import { runReviewers, type ReviewerResultWithEvents } from "./runner.js";
+import { runCoordinator, type CoordinatorResult } from "./coordinator.js";
 import { formatOutput } from "./output.js";
+import { writeFileSync } from "node:fs";
 import type { ReviewConfig, ReviewResult, ResolvedConfig, ReviewCategory } from "./types.js";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 export type { ReviewConfig, ReviewResult, ResolvedConfig };
 export type {
@@ -26,27 +23,6 @@ export type {
 export { formatOutput } from "./output.js";
 export { resolveConfig } from "./config.js";
 
-/**
- * Run an orchestrated swarm review.
- *
- * @param config - Review configuration
- * @returns Structured review result
- *
- * @example
- * ```ts
- * import { review } from "swarm-review";
- *
- * const result = await review({
- *   cwd: "/path/to/repo",
- *   diff: "main...HEAD",
- *   format: "json",
- * });
- *
- * console.log(result.verdict);      // "approved" | "approved_with_comments" | ...
- * console.log(result.findings);     // Array of Finding objects
- * console.log(result.summary);      // Human-readable summary
- * ```
- */
 export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
   const resolved = resolveConfig(config);
   const abortController = new AbortController();
@@ -77,11 +53,7 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
     else reviewers = ["security", "performance", "quality"];
   }
 
-  const finalConfig: ResolvedConfig = {
-    ...resolved,
-    riskTier,
-    reviewers,
-  };
+  const finalConfig: ResolvedConfig = { ...resolved, riskTier, reviewers };
 
   const reviewerResults = await runReviewers(
     reviewers,
@@ -98,5 +70,142 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
     abortController.signal,
   );
 
+  if (resolved.sessionLog) {
+    writeSessionLog(resolved.sessionLog, reviewerResults, result);
+  }
+
   return result;
+}
+
+function writeSessionLog(
+  path: string,
+  reviewerResults: ReviewerResultWithEvents[],
+  coordinatorResult: CoordinatorResult,
+) {
+  const lines: string[] = [];
+
+  for (const r of reviewerResults) {
+    if (r.events) {
+      for (const entry of consolidateEvents(r.events)) {
+        try { lines.push(JSON.stringify({ source: r.reviewer, ...entry })); } catch {}
+      }
+    }
+  }
+
+  if (coordinatorResult.coordinatorEvents) {
+    for (const entry of consolidateEvents(coordinatorResult.coordinatorEvents)) {
+      try { lines.push(JSON.stringify({ source: "coordinator", ...entry })); } catch {}
+    }
+  }
+
+  try {
+    writeFileSync(path, lines.join("\n"), "utf-8");
+  } catch (err) {
+    process.stderr?.write(`Failed to write session log: ${err}\n`);
+  }
+}
+
+/**
+ * Consolidate raw AgentEvent stream into concise, loggable entries.
+ *
+ * Instead of logging every message_update delta individually (thousands per turn),
+ * we buffer thinking/text deltas within each turn and emit a single consolidated
+ * entry when the turn ends.
+ */
+function consolidateEvents(events: AgentEvent[]): object[] {
+  const out: object[] = [];
+  let thinking = "";
+  let text = "";
+  let hasDeltas = false;
+
+  for (const event of events) {
+    switch (event.type) {
+      case "agent_start":
+        out.push({ type: "agent_start" });
+        break;
+
+      case "agent_end":
+        out.push({ type: "agent_end" });
+        break;
+
+      case "turn_start":
+        thinking = "";
+        text = "";
+        hasDeltas = false;
+        out.push({ type: "turn_start" });
+        break;
+
+      case "message_update": {
+        const ame = (event as any).assistantMessageEvent;
+        if (ame?.type === "thinking_delta" && ame.delta) {
+          thinking += ame.delta;
+          hasDeltas = true;
+        } else if (ame?.type === "text_delta" && ame.delta) {
+          text += ame.delta;
+          hasDeltas = true;
+        }
+        break;
+      }
+
+      case "turn_end": {
+        if (hasDeltas) {
+          const entry: any = { type: "turn_output" };
+          if (thinking) entry.thinking = thinking;
+          if (text) entry.text = text;
+          out.push(entry);
+        }
+
+        const msg = (event as any).message;
+        if (msg?.usage) {
+          out.push({
+            type: "usage",
+            input: msg.usage.input ?? 0,
+            output: msg.usage.output ?? 0,
+            cacheRead: msg.usage.cacheRead ?? 0,
+            cacheWrite: msg.usage.cacheWrite ?? 0,
+          });
+        }
+
+        const toolResults = (event as any).toolResults;
+        if (toolResults?.length) {
+          out.push({ type: "tool_results", count: toolResults.length });
+        }
+        break;
+      }
+
+      case "tool_execution_start":
+        out.push({
+          type: "tool_call",
+          tool: (event as any).toolName,
+          args: truncate((event as any).args, 2000),
+        });
+        break;
+
+      case "tool_execution_end":
+        out.push({
+          type: "tool_result",
+          tool: (event as any).toolName,
+          isError: (event as any).isError,
+          result: truncate((event as any).result, 2000),
+        });
+        break;
+
+      default:
+        out.push({ type: event.type, raw: true });
+        break;
+    }
+  }
+
+  return out;
+}
+
+function truncate(value: any, maxChars: number): any {
+  if (value === undefined || value === null) return value;
+  try {
+    const json = JSON.stringify(value);
+    if (json.length <= maxChars) return value;
+    return json.slice(0, maxChars) + `... [truncated ${json.length} chars]`;
+  } catch {
+    return String(value);
+  }
 }

@@ -2,6 +2,7 @@ import { SECURITY_PROMPT } from "./prompts/security.js";
 import { PERFORMANCE_PROMPT } from "./prompts/performance.js";
 import { QUALITY_PROMPT } from "./prompts/quality.js";
 import { createReviewerSession, runSession } from "./session.js";
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type {
   DiffResult,
   ReviewCategory,
@@ -70,12 +71,16 @@ async function mapWithConcurrency<TIn, TOut>(
   return results;
 }
 
+export interface ReviewerResultWithEvents extends ReviewerResult {
+  events?: AgentEvent[];
+}
+
 export async function runReviewers(
   categories: ReviewCategory[],
   diffResult: DiffResult,
   config: ResolvedConfig,
   signal?: AbortSignal,
-): Promise<ReviewerResult[]> {
+): Promise<ReviewerResultWithEvents[]> {
   const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
 
   const results = await mapWithConcurrency(
@@ -96,7 +101,7 @@ export async function runReviewers(
           thinkingLevel: config.thinkingLevel,
         });
 
-        const { usage } = await runSession(agent, prompt, config.reviewerTimeout, signal);
+        const { usage, events } = await runSession(agent, prompt, config.reviewerTimeout, signal);
 
         const findings = getFindings();
 
@@ -106,6 +111,7 @@ export async function runReviewers(
           model: `${model.provider}/${model.id}`,
           usage,
           durationMs: Date.now() - startTime,
+          events,
         };
       } catch (err: any) {
         return {
