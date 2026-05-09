@@ -80,8 +80,8 @@ export function formatText(result: ReviewResult, useColor: boolean): string {
 
   lines.push(useColor ? color("─".repeat(60), COLORS.dim) : "─".repeat(60));
   lines.push(useColor
-    ? color("  AI Code Review", COLORS.bold, COLORS.cyan) + " " + verdictColor(result.verdict, useColor)
-    : `  AI Code Review ${verdictIcon(result.verdict)}`);
+    ? color("  Swarm Review", COLORS.bold, COLORS.cyan) + " " + verdictColor(result.verdict, useColor)
+    : `  Swarm Review ${verdictIcon(result.verdict)}`);
   lines.push(useColor ? color("─".repeat(60), COLORS.dim) : "─".repeat(60));
 
   lines.push("");
@@ -145,7 +145,7 @@ export function formatJson(result: ReviewResult): string {
 export function formatMarkdown(result: ReviewResult): string {
   const lines: string[] = [];
 
-  lines.push(`# AI Code Review ${verdictIcon(result.verdict)}`);
+  lines.push(`# Swarm Review ${verdictIcon(result.verdict)}`);
   lines.push("");
   lines.push(`**Verdict:** ${result.verdict.replace(/_/g, " ")} | **Risk Tier:** ${result.riskTier}`);
   lines.push("");

@@ -1,10 +1,10 @@
 /**
- * ai-code-review — Orchestrated AI Code Review
+ * swarm-review — Swarm Review
  *
  * Library API. Import and call review() from any script.
  *
  * Usage:
- *   import { review } from "ai-code-review";
+ *   import { review } from "swarm-review";
  *   const result = await review({ cwd: "./my-project", diff: "main...HEAD" });
  *   console.log(result.verdict);
  */
@@ -27,14 +27,14 @@ export { formatOutput } from "./output.js";
 export { resolveConfig } from "./config.js";
 
 /**
- * Run an orchestrated AI code review.
+ * Run an orchestrated swarm review.
  *
  * @param config - Review configuration
  * @returns Structured review result
  *
  * @example
  * ```ts
- * import { review } from "ai-code-review";
+ * import { review } from "swarm-review";
  *
  * const result = await review({
  *   cwd: "/path/to/repo",

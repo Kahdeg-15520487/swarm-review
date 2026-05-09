@@ -1,5 +1,5 @@
 {
-  "name": "ai-code-review",
+  "name": "swarm-review",
   "version": "0.1.0",
   "description": "Orchestrated AI code review using specialized agents",
   "type": "module",
@@ -12,7 +12,7 @@
     }
   },
   "bin": {
-    "ai-code-review": "./dist/cli.js"
+    "swarm-review": "./dist/cli.js"
   },
   "files": [
     "dist"

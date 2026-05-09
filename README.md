@@ -1,4 +1,4 @@
-# ai-code-review
+# Swarm Review
 
 Orchestrated AI code review using specialized agents.
 
@@ -19,13 +19,13 @@ Dispatches security, performance, and code quality reviewers in parallel, then a
 ## Install
 
 ```bash
-npm install ai-code-review
+npm install swarm-review
 ```
 
 Or use directly:
 
 ```bash
-npx ai-code-review HEAD~1 --model deepseek-v4-flash --provider deepseek
+npx swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek
 ```
 
 ## CLI Usage
@@ -35,19 +35,19 @@ npx ai-code-review HEAD~1 --model deepseek-v4-flash --provider deepseek
 export DEEPSEEK_API_KEY=sk-...
 
 # Review last commit
-npx ai-code-review HEAD~1 --model deepseek-v4-flash --provider deepseek
+npx swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek
 
 # Review staged changes
-npx ai-code-review --diff staged --model deepseek-v4-flash --provider deepseek
+npx swarm-review --diff staged --model deepseek-v4-flash --provider deepseek
 
 # Review branch vs main, output JSON
-npx ai-code-review --diff main...HEAD --format json --model deepseek-v4-flash --provider deepseek
+npx swarm-review --diff main...HEAD --format json --model deepseek-v4-flash --provider deepseek
 
 # Only security + quality reviewers
-npx ai-code-review --diff HEAD~3 --reviewers security,quality --model deepseek-v4-flash --provider deepseek
+npx swarm-review --diff HEAD~3 --reviewers security,quality --model deepseek-v4-flash --provider deepseek
 
 # Custom instructions
-npx ai-code-review --diff HEAD~1 --instructions "Focus on authentication logic" --model deepseek-v4-flash --provider deepseek
+npx swarm-review --diff HEAD~1 --instructions "Focus on authentication logic" --model deepseek-v4-flash --provider deepseek
 ```
 
 **Supported providers:** Any provider supported by `@earendil-works/pi-ai`. Set the corresponding `*_API_KEY` environment variable (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`).
@@ -55,7 +55,7 @@ npx ai-code-review --diff HEAD~1 --instructions "Focus on authentication logic" 
 ## Library Usage
 
 ```typescript
-import { review } from "ai-code-review";
+import { review } from "swarm-review";
 
 const result = await review({
   diff: "main...HEAD",
@@ -73,9 +73,9 @@ console.log(result.totalUsage); // { inputTokens, outputTokens, cost }
 
 ```yaml
 # GitHub Actions example
-- name: AI Code Review
+- name: Swarm Review
   run: |
-    npx ai-code-review \
+    npx swarm-review \
       --diff ${{ github.event.pull_request.base.sha }}...${{ github.sha }} \
       --format json \
       --output review.json \

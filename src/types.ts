@@ -1,5 +1,5 @@
 /**
- * Core types for the orchestrated AI code review system.
+ * Core types for the orchestrated swarm review system.
  */
 
 export type Severity = "critical" | "warning" | "suggestion";

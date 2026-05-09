@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
 /**
- * ai-code-review — CLI entry point
+ * swarm-review — CLI entry point
  *
  * Usage:
- *   ai-code-review --diff HEAD~1 --cwd . --format text
- *   ai-code-review --diff main...HEAD --format json --output results.json
- *   ai-code-review --diff staged --reviewers security,quality
+ *   swarm-review --diff HEAD~1 --cwd . --format text
+ *   swarm-review --diff main...HEAD --format json --output results.json
+ *   swarm-review --diff staged --reviewers security,quality
  */
 
 import { writeFileSync } from "node:fs";
@@ -93,10 +93,10 @@ function parseCliArgs(): ReviewConfig & { help?: boolean } {
 
 function printHelp(): void {
   console.log(`
-ai-code-review — Orchestrated AI Code Review
+swarm-review — 
 
 USAGE:
-  ai-code-review [OPTIONS] [DIFF_SPEC]
+  swarm-review [OPTIONS] [DIFF_SPEC]
 
 ARGUMENTS:
   DIFF_SPEC              Git diff specification (default: HEAD~1)
@@ -119,19 +119,19 @@ OPTIONS:
 
 EXAMPLES:
   # Review last commit
-  ai-code-review HEAD~1
+  swarm-review HEAD~1
 
   # Review staged changes
-  ai-code-review --diff staged
+  swarm-review --diff staged
 
   # Review branch vs main, output as JSON
-  ai-code-review --diff main...HEAD --format json
+  swarm-review --diff main...HEAD --format json
 
   # Review with specific reviewers and custom instructions
-  ai-code-review --diff HEAD~3 --reviewers security,quality --instructions "Focus on auth"
+  swarm-review --diff HEAD~3 --reviewers security,quality --instructions "Focus on auth"
 
   # Use as library in a script:
-  # import { review } from "ai-code-review";
+  # import { review } from "swarm-review";
   # const result = await review({ diff: "HEAD~1" });
 `);
 }
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  console.error("Starting AI code review...");
+  console.error("Starting swarm review...");
   console.error(`  Diff: ${config.diff ?? "HEAD~1"}`);
   console.error(`  CWD:  ${config.cwd ?? process.cwd()}`);
 
