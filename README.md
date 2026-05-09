@@ -4,6 +4,8 @@ Orchestrated AI code review using specialized agents.
 
 Dispatches security, performance, and code quality reviewers in parallel, then a coordinator deduplicates findings and produces a final verdict. Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review.
 
+**[See it in action →](https://github.com/Kahdeg-15520487/swarm-review/pull/1)** — a PR with intentionally buggy code, reviewed automatically by Swarm Review.
+
 ## How It Works
 
 1. Extract git diff from your repository
