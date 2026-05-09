@@ -1,46 +1,56 @@
 # ai-code-review
 
-Orchestrated AI code review using specialized agents, built on [pi agent core](https://github.com/earendil-works/pi-mono).
+Orchestrated AI code review using specialized agents.
 
-Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review orchestration.
+Dispatches security, performance, and code quality reviewers in parallel, then a coordinator deduplicates findings and produces a final verdict. Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review.
 
 ## How It Works
 
-1. **Extract** git diff from your repository
-2. **Filter** noise (lock files, minified assets, vendored deps)
-3. **Assess** risk tier (trivial / lite / full)
-4. **Dispatch** specialized reviewers in parallel:
-   - 🔒 **Security** — injection, auth bypass, secrets
-   - ⚡ **Performance** — N+1 queries, memory leaks, algorithmic issues
-   - 🔍 **Code Quality** — logic errors, dead code, error handling
-5. **Coordinate** — deduplicate, re-categorize, judge severity
-6. **Output** — structured review in text, JSON, or markdown
+1. Extract git diff from your repository
+2. Filter noise (lock files, minified assets, vendored deps)
+3. Assess risk tier (trivial / lite / full)
+4. Dispatch specialized reviewers in parallel:
+   - **Security** — injection, auth bypass, secrets
+   - **Performance** — N+1 queries, memory leaks, algorithmic issues
+   - **Code Quality** — logic errors, dead code, error handling
+5. Coordinator deduplicates, re-categorizes, judges severity
+6. Output structured review in text, JSON, or markdown
 
 ## Install
 
 ```bash
-npm install
-npm run build
+npm install ai-code-review
+```
+
+Or use directly:
+
+```bash
+npx ai-code-review HEAD~1 --model deepseek-v4-flash --provider deepseek
 ```
 
 ## CLI Usage
 
 ```bash
+# Set your API key
+export DEEPSEEK_API_KEY=sk-...
+
 # Review last commit
-npx ai-code-review HEAD~1
+npx ai-code-review HEAD~1 --model deepseek-v4-flash --provider deepseek
 
 # Review staged changes
-npx ai-code-review --diff staged
+npx ai-code-review --diff staged --model deepseek-v4-flash --provider deepseek
 
 # Review branch vs main, output JSON
-npx ai-code-review --diff main...HEAD --format json
+npx ai-code-review --diff main...HEAD --format json --model deepseek-v4-flash --provider deepseek
 
 # Only security + quality reviewers
-npx ai-code-review --diff HEAD~3 --reviewers security,quality
+npx ai-code-review --diff HEAD~3 --reviewers security,quality --model deepseek-v4-flash --provider deepseek
 
 # Custom instructions
-npx ai-code-review --diff HEAD~1 --instructions "Focus on authentication logic"
+npx ai-code-review --diff HEAD~1 --instructions "Focus on authentication logic" --model deepseek-v4-flash --provider deepseek
 ```
+
+**Supported providers:** Any provider supported by `@earendil-works/pi-ai`. Set the corresponding `*_API_KEY` environment variable (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`).
 
 ## Library Usage
 
@@ -48,15 +58,15 @@ npx ai-code-review --diff HEAD~1 --instructions "Focus on authentication logic"
 import { review } from "ai-code-review";
 
 const result = await review({
-  cwd: "/path/to/repo",
   diff: "main...HEAD",
-  format: "json",
+  model: "deepseek-v4-flash",
+  provider: "deepseek",
 });
 
 console.log(result.verdict);    // "approved" | "approved_with_comments" | "minor_issues" | "significant_concerns"
-console.log(result.findings);   // Array<Finding>
+console.log(result.findings);   // Finding[]
 console.log(result.summary);    // string
-console.log(result.totalUsage); // { inputTokens, outputTokens, cost, ... }
+console.log(result.totalUsage); // { inputTokens, outputTokens, cost }
 ```
 
 ## CI/CD Integration
@@ -64,15 +74,18 @@ console.log(result.totalUsage); // { inputTokens, outputTokens, cost, ... }
 ```yaml
 # GitHub Actions example
 - name: AI Code Review
-  run: npx ai-code-review --diff ${{ github.event.pull_request.base.sha }}...${{ github.sha }} --format json --output review.json
+  run: |
+    npx ai-code-review \
+      --diff ${{ github.event.pull_request.base.sha }}...${{ github.sha }} \
+      --format json \
+      --output review.json \
+      --model deepseek-v4-flash \
+      --provider deepseek
   env:
-    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
-Exit codes:
-- `0` — approved or approved with comments
-- `1` — minor issues (warnings suggesting a risk pattern)
-- `2` — significant concerns (critical findings, blocks merge)
+Exit codes: `0` = approved, `1` = minor issues, `2` = significant concerns.
 
 ## Configuration
 
@@ -80,28 +93,31 @@ Exit codes:
 |--------|----------|---------|-------------|
 | `diff` | `--diff` | `HEAD~1` | Git ref range, "staged", or "unstaged" |
 | `cwd` | `--cwd` | `process.cwd()` | Repository root |
-| `model` | `--model` | auto | Model ID |
-| `provider` | `--provider` | auto | Model provider |
+| `model` | `--model` | required | Model ID (e.g. `deepseek-v4-flash`) |
+| `provider` | `--provider` | required | Model provider (e.g. `deepseek`) |
 | `reviewers` | `--reviewers` | auto (by risk tier) | Comma-separated: security,performance,quality |
 | `riskTier` | `--risk-tier` | auto-assessed | trivial, lite, or full |
 | `format` | `--format` | text | Output: text, json, markdown |
+| `output` | `--output` | stdout | Write output to file |
 | `timeout` | `--timeout` | 300000 | Per-reviewer timeout (ms) |
 | `concurrency` | `--concurrency` | 3 | Max concurrent reviewers |
 | `instructions` | `--instructions` | none | Custom instructions for all reviewers |
 | `thinkingLevel` | `--thinking-level` | medium | LLM thinking: off, low, medium, high |
 
+## Risk Tiers
+
+The tool automatically assesses the diff and selects reviewers:
+
+| Tier | Lines | Reviewers |
+|------|-------|-----------|
+| **trivial** | ≤10 lines | quality only |
+| **lite** | ≤100 lines | quality + security |
+| **full** | >100 lines or security-sensitive files | all three |
+
+Override with `--risk-tier` or `--reviewers`.
+
 ## Requirements
 
-- Node.js ≥ 22
-- At least one LLM API key (ANTHROPIC_API_KEY, OPENAI_API_KEY, etc.)
-- Git repository
-
-## Architecture
-
-Based on the [Cloudflare blog post](https://blog.cloudflare.com/ai-code-review) architecture:
-
-- **Specialized agents** instead of one big prompt
-- **Risk tiers** to avoid over-spending on trivial changes
-- **Coordinator** for deduplication and severity judgment
-- **Structured tools** (`report_finding`, `submit_review`) for clean output
-- **Diff filtering** to remove noise before review
+- Node.js >= 22
+- An API key for at least one LLM provider
+- A git repository

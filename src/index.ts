@@ -51,10 +51,7 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
   const resolved = resolveConfig(config);
   const abortController = new AbortController();
 
-  // 1. Extract git diff
   const rawDiff = await getDiff(resolved.cwd, resolved.diff);
-
-  // 2. Filter noise
   const filteredDiff = filterDiff(rawDiff);
 
   if (filteredDiff.files.length === 0) {
@@ -70,27 +67,22 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
     };
   }
 
-  // 3. Assess risk tier (use user override if provided, otherwise auto-assess)
   const userOverride = config.riskTier !== undefined;
   const riskTier = userOverride ? resolved.riskTier : assessRiskTier(filteredDiff.files);
 
-  // 4. Determine which reviewers to run
   let reviewers: ReviewCategory[] = resolved.reviewers;
   if (!config.reviewers) {
-    // Auto-select based on risk tier
     if (riskTier === "trivial") reviewers = ["quality"];
     else if (riskTier === "lite") reviewers = ["quality", "security"];
     else reviewers = ["security", "performance", "quality"];
   }
 
-  // Update config with actual resolved values
   const finalConfig: ResolvedConfig = {
     ...resolved,
     riskTier,
     reviewers,
   };
 
-  // 5. Run specialized reviewers
   const reviewerResults = await runReviewers(
     reviewers,
     filteredDiff,
@@ -98,7 +90,6 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
     abortController.signal,
   );
 
-  // 6. Run coordinator
   const result = await runCoordinator(
     reviewerResults,
     filteredDiff,

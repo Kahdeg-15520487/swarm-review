@@ -83,8 +83,7 @@ function parseCliArgs(): ReviewConfig & { help?: boolean } {
           console.error(`Unknown option: ${arg}`);
           process.exit(1);
         }
-        // Positional argument treated as diff spec
-        if (!config.diff) config.diff = arg;
+    if (!config.diff) config.diff = arg;
         break;
     }
   }
@@ -163,7 +162,6 @@ async function main(): Promise<void> {
       console.log(output);
     }
 
-    // Exit with non-zero if significant concerns
     if (result.verdict === "significant_concerns") {
       process.exit(2);
     }

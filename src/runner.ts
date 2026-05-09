@@ -70,22 +70,13 @@ async function mapWithConcurrency<TIn, TOut>(
   return results;
 }
 
-// Build a getApiKey function from environment variables
-function buildGetApiKey(config: ResolvedConfig): (provider: string) => string | undefined {
-  return (provider: string) => {
-    const envKey = `${provider.toUpperCase()}_API_KEY`;
-    const key = process.env[envKey];
-    return key || undefined;
-  };
-}
-
 export async function runReviewers(
   categories: ReviewCategory[],
   diffResult: DiffResult,
   config: ResolvedConfig,
   signal?: AbortSignal,
 ): Promise<ReviewerResult[]> {
-  const getApiKey = buildGetApiKey(config);
+  const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
 
   const results = await mapWithConcurrency(
     categories,

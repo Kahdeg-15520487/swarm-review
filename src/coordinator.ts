@@ -56,13 +56,6 @@ ${findingsXml}
   return prompt;
 }
 
-function buildGetApiKey(config: ResolvedConfig): (provider: string) => string | undefined {
-  return (provider: string) => {
-    const envKey = `${provider.toUpperCase()}_API_KEY`;
-    return process.env[envKey] || undefined;
-  };
-}
-
 export async function runCoordinator(
   reviewerResults: ReviewerResult[],
   diffResult: DiffResult,
@@ -85,7 +78,7 @@ export async function runCoordinator(
 
   const systemPrompt = COORDINATOR_PROMPT;
   const prompt = buildCoordinatorPrompt(reviewerResults, diffResult, config);
-  const getApiKey = buildGetApiKey(config);
+  const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
 
   try {
     const { agent, getReview, model } = await createReviewerSession({

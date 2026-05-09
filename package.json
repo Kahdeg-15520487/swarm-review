@@ -1,7 +1,7 @@
 {
   "name": "ai-code-review",
   "version": "0.1.0",
-  "description": "Orchestrated AI code review using specialized agents, based on pi agent core",
+  "description": "Orchestrated AI code review using specialized agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,17 +14,32 @@
   "bin": {
     "ai-code-review": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
     "start": "node dist/cli.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsc"
   },
+  "keywords": [
+    "code-review",
+    "ai",
+    "llm",
+    "git",
+    "agent",
+    "orchestration",
+    "security",
+    "ci-cd"
+  ],
+  "license": "MIT",
   "dependencies": {
-    "@earendil-works/pi-agent-core": "latest",
-    "@earendil-works/pi-ai": "latest",
-    "typebox": "latest",
-    "simple-git": "latest"
+    "@earendil-works/pi-agent-core": "^0.74.0",
+    "@earendil-works/pi-ai": "^0.74.0",
+    "typebox": "^1.1.38",
+    "simple-git": "^3.36.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
