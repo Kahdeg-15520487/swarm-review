@@ -35,6 +35,14 @@
     "ci-cd"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kahdeg-15520487/swarm-review.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Kahdeg-15520487/swarm-review/issues"
+  },
+  "homepage": "https://github.com/Kahdeg-15520487/swarm-review#readme",
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.74.0",
     "@earendil-works/pi-ai": "^0.74.0",
