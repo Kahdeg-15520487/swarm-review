@@ -11,7 +11,6 @@ import type {
   ReviewCategory,
   ReviewerResult,
   ResolvedConfig,
-  Finding,
 } from "./types.js";
 
 function buildReviewerPrompt(
