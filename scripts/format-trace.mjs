@@ -179,9 +179,9 @@ for (const [source, entries] of sources) {
 
     switch (entry.type) {
       case "agent_start":
-        break;
-
       case "agent_end":
+      case "message_start":
+      case "message_end":
         break;
 
       case "turn_start":
