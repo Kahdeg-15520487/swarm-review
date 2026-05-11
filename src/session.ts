@@ -165,6 +165,9 @@ export async function runSession(
   prompt: string,
   timeoutMs: number,
   signal?: AbortSignal,
+  onEvent?: (source: string, event: AgentEvent) => void,
+  /** Label used as the source in onEvent callbacks. Defaults to "reviewer". */
+  eventSource?: string,
 ): Promise<{ output: string; usage: TokenUsage; events: AgentEvent[] }> {
   const output: string[] = [];
   const usage: TokenUsage = {
@@ -178,6 +181,7 @@ export async function runSession(
 
   const unsubscribe = agent.subscribe((event) => {
     events.push(event);
+    onEvent?.(eventSource ?? "reviewer", event);
 
     if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
       output.push(event.assistantMessageEvent.delta);

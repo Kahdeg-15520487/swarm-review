@@ -10,7 +10,7 @@ import type {
   ResolvedConfig,
 } from "./types.js";
 
-function buildReviewerPrompt(
+export function buildReviewerPrompt(
   category: ReviewCategory,
   diffResult: DiffResult,
   config: ResolvedConfig,
@@ -38,7 +38,7 @@ ${diffContent}`;
   return prompt;
 }
 
-function getSystemPrompt(category: ReviewCategory): string {
+export function getSystemPrompt(category: ReviewCategory): string {
   switch (category) {
     case "security":
       return SECURITY_PROMPT;
@@ -80,6 +80,7 @@ export async function runReviewers(
   diffResult: DiffResult,
   config: ResolvedConfig,
   signal?: AbortSignal,
+  onEvent?: import("./types.js").ReviewEventCallback,
 ): Promise<ReviewerResultWithEvents[]> {
   const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
 
@@ -101,7 +102,7 @@ export async function runReviewers(
           thinkingLevel: config.thinkingLevel,
         });
 
-        const { usage, events } = await runSession(agent, prompt, config.reviewerTimeout, signal);
+        const { usage, events } = await runSession(agent, prompt, config.reviewerTimeout, signal, onEvent);
 
         const findings = getFindings();
 
