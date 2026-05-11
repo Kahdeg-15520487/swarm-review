@@ -102,7 +102,7 @@ export async function runReviewers(
           thinkingLevel: config.thinkingLevel,
         });
 
-        const { usage, events } = await runSession(agent, prompt, config.reviewerTimeout, signal, onEvent);
+        const { usage, events } = await runSession(agent, prompt, config.reviewerTimeout, signal, onEvent, category);
 
         const findings = getFindings();
 
