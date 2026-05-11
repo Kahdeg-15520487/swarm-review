@@ -134,11 +134,10 @@ function consolidateEvents(events: AgentEvent[]): object[] {
   for (const event of events) {
     switch (event.type) {
       case "agent_start":
-        out.push({ type: "agent_start" });
-        break;
-
       case "agent_end":
-        out.push({ type: "agent_end" });
+      case "message_start":
+      case "message_end":
+        // Silently skip — no substance for the trace log
         break;
 
       case "turn_start":
