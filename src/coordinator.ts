@@ -3,7 +3,7 @@ import { createReviewerSession, runSession } from "./session.js";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { ReviewerResult, ReviewResult, ResolvedConfig, DiffResult, RiskTier, Verdict } from "./types.js";
 
-function buildCoordinatorPrompt(
+export function buildCoordinatorPrompt(
   reviewerResults: ReviewerResult[],
   diffResult: DiffResult,
   config: ResolvedConfig,
@@ -67,6 +67,7 @@ export async function runCoordinator(
   riskTier: RiskTier,
   config: ResolvedConfig,
   signal?: AbortSignal,
+  onEvent?: import("./types.js").ReviewEventCallback,
 ): Promise<ReviewResult> {
   const startTime = Date.now();
 
@@ -101,6 +102,8 @@ export async function runCoordinator(
       prompt,
       coordinatorTimeout,
       signal,
+      onEvent,
+      "coordinator",
     );
 
     const review = getReview();

@@ -1,3 +1,8 @@
+import type { AgentEvent } from "@earendil-works/pi-agent-core";
+
+/** Callback for real-time agent events during review */
+export type ReviewEventCallback = (source: string, event: AgentEvent) => void;
+
 /**
  * Core types for the orchestrated swarm review system.
  */
@@ -86,9 +91,13 @@ export interface ReviewConfig {
 
   /** Write full session trace (events, tool calls, thinking, tokens) as JSONL */
   sessionLog?: string;
+
+  /** Optional callback for real-time agent events during review */
+  onEvent?: ReviewEventCallback;
 }
 
-export interface ResolvedConfig extends Required<Omit<ReviewConfig, 'outputFile' | 'sessionLog'>> {
+export interface ResolvedConfig extends Required<Omit<ReviewConfig, 'outputFile' | 'sessionLog' | 'onEvent'>> {
   outputFile?: string;
   sessionLog?: string;
+  onEvent?: ReviewEventCallback;
 }

@@ -23,5 +23,6 @@ export function resolveConfig(input: ReviewConfig): ResolvedConfig {
     thinkingLevel: input.thinkingLevel ?? "medium",
     color: input.color ?? isTty,
     sessionLog: input.sessionLog,
+    onEvent: input.onEvent,
   };
 }

@@ -15,13 +15,24 @@ import { writeFileSync } from "node:fs";
 import type { ReviewConfig, ReviewResult, ResolvedConfig, ReviewCategory } from "./types.js";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
-export type { ReviewConfig, ReviewResult, ResolvedConfig };
+export type { ReviewConfig, ReviewResult, ResolvedConfig, ReviewEventCallback } from "./types.js";
 export type {
   Finding, ReviewerResult, Verdict, Severity,
-  RiskTier, OutputFormat, DiffFile, DiffResult,
+  RiskTier, OutputFormat, DiffFile, DiffResult, ReviewCategory,
 } from "./types.js";
 export { formatOutput } from "./output.js";
 export { resolveConfig } from "./config.js";
+
+// Exported building blocks — use these for custom integration
+export { getDiff } from "./diff/git.js";
+export { filterDiff } from "./diff/filter.js";
+export { assessRiskTier } from "./diff/risk.js";
+export { createReviewerSession, runSession } from "./session.js";
+export type { SessionOptions } from "./session.js";
+export { runReviewers, buildReviewerPrompt, getSystemPrompt } from "./runner.js";
+export type { ReviewerResultWithEvents } from "./runner.js";
+export { runCoordinator, buildCoordinatorPrompt } from "./coordinator.js";
+export type { CoordinatorResult } from "./coordinator.js";
 
 export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
   const resolved = resolveConfig(config);
@@ -60,6 +71,7 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
     filteredDiff,
     finalConfig,
     abortController.signal,
+    resolved.onEvent,
   );
 
   const result = await runCoordinator(
@@ -68,6 +80,7 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
     riskTier,
     finalConfig,
     abortController.signal,
+    resolved.onEvent,
   );
 
   if (resolved.sessionLog) {
