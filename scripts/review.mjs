@@ -13,7 +13,10 @@
  */
 
 import { writeFileSync } from "node:fs";
-import { review, formatOutput } from "swarm-review";
+
+// Local import — resolves to the repo's built dist/
+// The CI workflow builds before running this script.
+import { review, formatOutput } from "../dist/index.js";
 
 // ── Progress formatting ──
 
