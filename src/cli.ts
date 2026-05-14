@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { runSwarmReview } from "./orchestrator.js";
 
 async function main() {
-  const { values, positionals } = parseArgs({
+  const { values } = parseArgs({
     options: {
       help: { type: "boolean", short: "h", default: false },
       "custom-instructions": { type: "string", short: "c" },
@@ -13,7 +13,7 @@ async function main() {
       output: { type: "string", short: "o" },
       tier: { type: "string", short: "t" },
       diff: { type: "string", short: "d" },
-      repo: { type: "string", short: "r" },
+      "cwd": { type: "string", short: "C" },
       ci: { type: "boolean", default: false },
     },
     allowPositionals: false,
@@ -24,50 +24,36 @@ async function main() {
 swarm-review — AI code review swarm
 
 USAGE:
-  swarm-review                      Auto-detect context and review
+  swarm-review                      Auto-detect context and review (current dir)
+  swarm-review -C /path/to/repo     Auto-detect in another directory
   swarm-review --diff path.patch    Review a specific diff file
-  swarm-review --ci                 CI mode (JSON output, no prompts)
+  swarm-review --ci                 CI mode (JSON output)
 
 OPTIONS:
   -h, --help                 Show this help
+  -C, --cwd <path>           Working directory (default: current dir)
   -c, --custom-instructions  Custom instructions for all reviewers
-  -k, --keep-temp            Keep .swarm-review/ temp files after run
+  -k, --keep-temp            Keep .swarm-review/ temp files
   -o, --output <path>        Write final review to <path> (default: review-result.md)
   -t, --tier <tier>          Override risk tier (trivial | lite | full)
   -d, --diff <path>          Path to a diff file (skips auto-detection)
-  -r, --repo <path>          Repository root (default: auto-detected from cwd)
-  --ci                        CI mode — JSON output to stdout
+  --ci                        CI mode — JSON output
 
 EXAMPLES:
-  swarm-review                                # Auto-detect & review
-  swarm-review --diff my.patch                # Review a specific patch
-  swarm-review --custom-instructions "focus on auth"  # Custom focus
-  swarm-review --ci                           # JSON output for CI
-
-AUTO-DETECTION:
-  • Uncommitted changes → review working tree diff
-  • On a feature branch → review commits since diverging from master/main
-  • On master/main       → review last commit
+  swarm-review                                # Current directory
+  swarm-review -C ~/projects/my-app           # Another repo
+  swarm-review -C ~/projects/my-app --diff HEAD~3
+  swarm-review --diff my.patch                # Specific patch file
+  swarm-review --ci                           # JSON for pipelines
 `);
     process.exit(0);
   }
 
-  const cwd = process.cwd();
-
-  // If --diff provided, read it explicitly
-  const config = values.diff
-    ? {
-        repoRoot: values.repo ?? cwd,
-        diffPath: values.diff,
-        branch: "unknown",
-        tier: (values.tier as any) ?? "full",
-      }
-    : undefined;
+  const cwd = values.cwd ?? process.cwd();
 
   try {
     const { resultPath } = await runSwarmReview({
       cwd,
-      config: config as any,
       customInstructions: values["custom-instructions"],
       keepTemp: values["keep-temp"],
       outputPath: values.output,
@@ -76,11 +62,7 @@ AUTO-DETECTION:
 
     if (values.ci) {
       const content = readFileSync(resultPath, "utf-8");
-      const result = {
-        status: "completed",
-        resultPath,
-        summary: content.slice(0, 500),
-      };
+      const result = { status: "completed", resultPath, summary: content.slice(0, 500) };
       console.log(JSON.stringify(result, null, 2));
     } else {
       console.log(`\n✅ Review complete → ${resultPath}`);
