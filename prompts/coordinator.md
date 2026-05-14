@@ -95,6 +95,18 @@ If this is a re-review:
 - Do not write verbose commentary. Be concise and actionable.
 - Do not include issues from unchanged code outside the diff scope.
 
+## Fallback Output Format (when `submit_review` tool is unavailable)
+
+If you are running this prompt directly without the swarm-review CLI harness (e.g., in Claude Code, ChatGPT, or another agent), output a single JSON object at the end of your response with this exact marker format:
+
+```json
+<!-- review -->
+{"verdict":"approved_with_comments","summary":"Brief summary.","findings":[{"severity":"warning","domain":"Code Quality","file":"path/to/file.ts","line":42,"title":"Title","description":"Description","recommendation":"Fix"}]}
+<!-- /review -->
+```
+
+Domain must be one of: Code Quality, Security, Performance, Documentation, Compliance / codex, AGENTS.md, Release.
+
 ## Anti-Patterns
 
 | Anti-Pattern | Why It Fails |
