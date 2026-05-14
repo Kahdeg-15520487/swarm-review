@@ -1,0 +1,35 @@
+{
+  "failbackChains": {
+    "top-tier": {
+      "primary": "opus-4-7",
+      "fallback1": "gpt-5.4",
+      "fallback2": "opus-4-6",
+      "description": "Used for Coordinator in Full tier reviews"
+    },
+    "standard": {
+      "primary": "sonnet-4-6",
+      "fallback1": "gpt-5.3-codex",
+      "fallback2": "sonnet-4-5",
+      "description": "Used for sub-reviewers and Coordinator in Trivial/Lite reviews"
+    },
+    "lightweight": {
+      "primary": "kimi-k2.5",
+      "fallback1": "sonnet-4-5",
+      "fallback2": null,
+      "description": "Used for Documentation, AGENTS.md, and Release reviewers"
+    }
+  },
+  "circuitBreaker": {
+    "cooldownSeconds": 120,
+    "probeEnabled": true,
+    "errorClassification": {
+      "retryable": ["APIError"],
+      "nonRetryable": [
+        "ProviderAuthError",
+        "ContextOverflowError",
+        "MessageAbortedError",
+        "StructuredOutputError"
+      ]
+    }
+  }
+}

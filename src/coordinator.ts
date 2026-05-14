@@ -1,157 +1,108 @@
-import { COORDINATOR_PROMPT } from "./prompts/coordinator.js";
-import { createReviewerSession, runSession } from "./session.js";
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import type { ReviewerResult, ReviewResult, ResolvedConfig, DiffResult, RiskTier, Verdict } from "./types.js";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { Agent } from "@earendil-works/pi-agent-core";
+import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
+import type { DomainFindings, ReviewResult, Verdict } from "./types.js";
 
-export function buildCoordinatorPrompt(
-  reviewerResults: ReviewerResult[],
-  diffResult: DiffResult,
-  config: ResolvedConfig,
-): string {
-  const findingsXml = reviewerResults
-    .map((r) => {
-      if (r.error) {
-        return `<reviewer name="${r.reviewer}" status="error">\n  <error>${r.error}</error>\n</reviewer>`;
-      }
-      const findings = r.findings
-        .map(
-          (f) =>
-            `  <finding severity="${f.severity}" category="${f.category}">\n` +
-            `    <title>${f.title}</title>\n` +
-            `    <file>${f.file}${f.line ? `:${f.line}` : ""}</file>\n` +
-            `    <description>${f.description}</description>\n` +
-            `    <recommendation>${f.recommendation}</recommendation>\n` +
-            `  </finding>`,
-        )
-        .join("\n");
+const SKILL_DIR = resolve(import.meta.dirname, "..");
 
-      return `<reviewer name="${r.reviewer}" status="completed" findings="${r.findings.length}">\n${findings || "  <no-findings/>\n"}\n</reviewer>`;
-    })
+/** Run the coordinator judge pass as a standalone agent session */
+export async function runCoordinator(
+  allFindings: DomainFindings[],
+  sharedContextPath: string,
+  diffPath: string,
+  outputPath: string,
+  customInstructions?: string,
+): Promise<ReviewResult> {
+  const prompt = readFileSync(resolve(SKILL_DIR, "prompts", "coordinator.md"), "utf-8");
+  let sharedContext = "";
+  try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch { /* optional */ }
+
+  const findingsText = allFindings
+    .map((d) => `## ${d.domain}\n${d.findings.map((f) => `- [${f.severity}] ${f.file}:${f.line} — ${f.title}`).join("\n")}`)
     .join("\n\n");
 
-  const filesSummary = diffResult.files
-    .map((f) => `- ${f.path} (+${f.addedLines}/-${f.removedLines})`)
-    .join("\n");
+  const model = getModel("anthropic", "claude-opus-4-5");
+  if (!model) throw new Error("No top-tier model available. Set ANTHROPIC_API_KEY.");
 
-  let prompt = `## Coordinate This Review
+  const agent = new Agent({
+    initialState: {
+      systemPrompt: "You are a code review coordinator. Consolidate findings and produce a verdict.",
+      model,
+      thinkingLevel: "medium",
+      tools: [],
+    },
+    streamFn: streamSimpleOpenAICompletions as any,
+    getApiKey: (p: string) => process.env[`${p.toUpperCase()}_API_KEY`] || undefined,
+  });
 
-### Changed Files
-${filesSummary}
+  let output = "";
+  agent.subscribe((event: any) => {
+    if (event.type === "message_update" && event.assistantMessageEvent?.type === "text_delta") {
+      output += event.assistantMessageEvent.delta;
+    }
+  });
 
-### Reviewer Findings
+  const instructions = [
+    `# Coordinator Instructions`,
+    ``,
+    prompt,
+    ``,
+    `# Sub-Reviewer Findings`,
+    findingsText,
+    ``,
+    `# Shared Context`,
+    sharedContext,
+    ``,
+    customInstructions ? `\n# Custom Instructions\n${customInstructions}` : "",
+    ``,
+    `Produce a single structured review with verdict and all findings.`,
+  ].join("\n");
 
-${findingsXml}
+  await agent.prompt(instructions);
+  await agent.waitForIdle();
 
-### Your Task
+  writeFileSync(outputPath, output);
+  return parseReviewResult(output);
+}
 
-1. Read through ALL findings from ALL reviewers above.
-2. Deduplicate: if the same issue is flagged by multiple reviewers, keep it ONCE in the best category.
-3. Filter: drop false positives, nitpicks, and vague suggestions. If unsure about a finding, read the source code to verify.
-4. Re-categorize: move misfiled findings to the correct category.
-5. Judge overall severity and produce a verdict using the submit_review tool.`;
+function parseReviewResult(output: string): ReviewResult {
+  const verdictMatch = output.match(/<verdict>(.*?)<\/verdict>/);
+  const summaryMatch = output.match(/<summary>([\s\S]*?)<\/summary>/);
 
-  if (config.customInstructions) {
-    prompt += `\n\n### Custom Instructions\n\n${config.customInstructions}`;
+  const verdict: Verdict = (verdictMatch?.[1]?.trim() as Verdict) ?? "minor_issues";
+
+  const findings: DomainFindings[] = [];
+  const domainRegex = /<domain\s+name="(.*?)">([\s\S]*?)<\/domain>/g;
+  let domainMatch;
+  while ((domainMatch = domainRegex.exec(output)) !== null) {
+    const domain = domainMatch[1];
+    const body = domainMatch[2];
+    const findingRegex = /<finding\s+severity="(critical|warning|suggestion)">([\s\S]*?)<\/finding>/g;
+    const findingsList = [];
+    let fm;
+    while ((fm = findingRegex.exec(body)) !== null) {
+      const fbody = fm[2];
+      findingsList.push({
+        severity: fm[1] as any,
+        file: extractTag(fbody, "file") || "",
+        line: Number(extractTag(fbody, "line")) || 0,
+        title: extractTag(fbody, "title") || "",
+        description: extractTag(fbody, "description") || "",
+        recommendation: extractTag(fbody, "recommendation") || "",
+      });
+    }
+    findings.push({ domain, findings: findingsList });
   }
 
-  return prompt;
+  return {
+    verdict,
+    summary: summaryMatch?.[1]?.trim() ?? "",
+    findings,
+  };
 }
 
-export interface CoordinatorResult extends ReviewResult {
-  coordinatorEvents?: AgentEvent[];
-}
-
-export async function runCoordinator(
-  reviewerResults: ReviewerResult[],
-  diffResult: DiffResult,
-  riskTier: RiskTier,
-  config: ResolvedConfig,
-  signal?: AbortSignal,
-  onEvent?: import("./types.js").ReviewEventCallback,
-): Promise<ReviewResult> {
-  const startTime = Date.now();
-
-  const totalUsage = reviewerResults.reduce(
-    (acc, r) => ({
-      inputTokens: acc.inputTokens + r.usage.inputTokens,
-      outputTokens: acc.outputTokens + r.usage.outputTokens,
-      cacheReadTokens: acc.cacheReadTokens + r.usage.cacheReadTokens,
-      cacheWriteTokens: acc.cacheWriteTokens + r.usage.cacheWriteTokens,
-      cost: acc.cost + r.usage.cost,
-    }),
-    { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0 },
-  );
-
-  const systemPrompt = COORDINATOR_PROMPT;
-  const prompt = buildCoordinatorPrompt(reviewerResults, diffResult, config);
-  const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
-
-  try {
-    const { agent, getReview, model } = await createReviewerSession({
-      systemPrompt,
-      category: "coordinator",
-      model: config.model,
-      provider: config.provider,
-      getApiKey,
-      thinkingLevel: config.thinkingLevel,
-    });
-
-    const coordinatorTimeout = config.reviewerTimeout * 2;
-    const { usage: coordinatorUsage, events: coordinatorEvents } = await runSession(
-      agent,
-      prompt,
-      coordinatorTimeout,
-      signal,
-      onEvent,
-      "coordinator",
-    );
-
-    const review = getReview();
-
-    totalUsage.inputTokens += coordinatorUsage.inputTokens;
-    totalUsage.outputTokens += coordinatorUsage.outputTokens;
-    totalUsage.cacheReadTokens += coordinatorUsage.cacheReadTokens;
-    totalUsage.cacheWriteTokens += coordinatorUsage.cacheWriteTokens;
-    totalUsage.cost += coordinatorUsage.cost;
-
-    const verdict: Verdict = review?.verdict ?? deriveVerdict(reviewerResults);
-
-    return {
-      verdict,
-      findings: review?.findings ?? aggregateFindings(reviewerResults),
-      summary: review?.summary ?? "Review completed with some automation issues.",
-      riskTier,
-      reviewers: reviewerResults,
-      totalUsage,
-      durationMs: Date.now() - startTime,
-      config,
-      coordinatorEvents,
-    };
-  } catch (err: any) {
-    return {
-      verdict: deriveVerdict(reviewerResults),
-      findings: aggregateFindings(reviewerResults),
-      summary: `Coordinator failed (${err.message}). Results are raw, un-deduplicated findings.`,
-      riskTier,
-      reviewers: reviewerResults,
-      totalUsage,
-      durationMs: Date.now() - startTime,
-      config,
-    };
-  }
-}
-
-function deriveVerdict(reviewers: ReviewerResult[]): Verdict {
-  const allFindings = reviewers.flatMap((r) => r.findings);
-  const hasCritical = allFindings.some((f) => f.severity === "critical");
-  const warningCount = allFindings.filter((f) => f.severity === "warning").length;
-
-  if (hasCritical) return "significant_concerns";
-  if (warningCount >= 3) return "minor_issues";
-  if (warningCount > 0) return "approved_with_comments";
-  return "approved";
-}
-
-function aggregateFindings(reviewers: ReviewerResult[]) {
-  return reviewers.flatMap((r) => r.findings);
+function extractTag(body: string, tag: string): string {
+  const m = body.match(new RegExp(`<${tag}>([\s\S]*?)<\/${tag}>`));
+  return m ? m[1].trim() : "";
 }

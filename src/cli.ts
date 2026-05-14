@@ -1,181 +1,94 @@
 #!/usr/bin/env node
 
-/**
- * swarm-review — CLI entry point
- *
- * Usage:
- *   swarm-review --diff HEAD~1 --cwd . --format text
- *   swarm-review --diff main...HEAD --format json --output results.json
- *   swarm-review --diff staged --reviewers security,quality
- */
+import { readFileSync } from "node:fs";
+import { parseArgs } from "node:util";
+import { runSwarmReview } from "./orchestrator.js";
 
-import { writeFileSync } from "node:fs";
-import { review, formatOutput } from "./index.js";
-import type { ReviewConfig, ReviewCategory, RiskTier, OutputFormat } from "./types.js";
+async function main() {
+  const { values, positionals } = parseArgs({
+    options: {
+      help: { type: "boolean", short: "h", default: false },
+      "custom-instructions": { type: "string", short: "c" },
+      "keep-temp": { type: "boolean", short: "k", default: false },
+      output: { type: "string", short: "o" },
+      tier: { type: "string", short: "t" },
+      diff: { type: "string", short: "d" },
+      repo: { type: "string", short: "r" },
+      ci: { type: "boolean", default: false },
+    },
+    allowPositionals: false,
+  });
 
-function parseCliArgs(): ReviewConfig & { help?: boolean } {
-  const args = process.argv.slice(2);
-  const config: ReviewConfig & { help?: boolean } = {};
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const next = () => {
-      const val = args[++i];
-      if (!val) {
-        console.error(`Missing value for ${arg}`);
-        process.exit(1);
-      }
-      return val;
-    };
-
-    switch (arg) {
-      case "--help":
-      case "-h":
-        config.help = true;
-        break;
-      case "--diff":
-      case "-d":
-        config.diff = next();
-        break;
-      case "--cwd":
-      case "-c":
-        config.cwd = next();
-        break;
-      case "--model":
-      case "-m":
-        config.model = next();
-        break;
-      case "--provider":
-        config.provider = next();
-        break;
-      case "--reviewers":
-      case "-r":
-        config.reviewers = next().split(",").map((s) => s.trim() as ReviewCategory);
-        break;
-      case "--risk-tier":
-        config.riskTier = next() as RiskTier;
-        break;
-      case "--format":
-      case "-f":
-        config.format = next() as OutputFormat;
-        break;
-      case "--output":
-      case "-o":
-        config.outputFile = next();
-        break;
-      case "--session-log":
-        config.sessionLog = next();
-        break;
-      case "--timeout":
-        config.reviewerTimeout = parseInt(next(), 10);
-        break;
-      case "--concurrency":
-        config.maxConcurrency = parseInt(next(), 10);
-        break;
-      case "--instructions":
-        config.customInstructions = next();
-        break;
-      case "--thinking-level":
-        config.thinkingLevel = next() as ReviewConfig["thinkingLevel"];
-        break;
-      case "--no-color":
-        config.color = false;
-        break;
-      default:
-        if (arg.startsWith("-")) {
-          console.error(`Unknown option: ${arg}`);
-          process.exit(1);
-        }
-    if (!config.diff) config.diff = arg;
-        break;
-    }
-  }
-
-  return config;
-}
-
-function printHelp(): void {
-  console.log(`
-swarm-review — 
+  if (values.help) {
+    console.log(`
+swarm-review — AI code review swarm
 
 USAGE:
-  swarm-review [OPTIONS] [DIFF_SPEC]
-
-ARGUMENTS:
-  DIFF_SPEC              Git diff specification (default: HEAD~1)
+  swarm-review                      Auto-detect context and review
+  swarm-review --diff path.patch    Review a specific diff file
+  swarm-review --ci                 CI mode (JSON output, no prompts)
 
 OPTIONS:
-  -h, --help             Show this help message
-  -d, --diff <spec>      Diff source: git ref range, "staged", or "unstaged"
-  -c, --cwd <path>       Working directory (default: current directory)
-  -m, --model <id>       Model ID to use (default: auto-detect)
-  --provider <name>      Model provider (default: auto-detect)
-  -r, --reviewers <list> Comma-separated reviewers: security,performance,quality
-  --risk-tier <tier>     Override risk tier: trivial, lite, full
-  -f, --format <fmt>     Output format: text, json, markdown (default: text)
-  -o, --output <file>    Write output to file instead of stdout
-  --timeout <ms>         Per-reviewer timeout in ms (default: 300000)
-  --concurrency <n>      Max concurrent reviewers (default: 3)
-  --instructions <text>  Custom instructions for all reviewers
-  --thinking-level <lvl> LLM thinking level: off, low, medium, high (default: medium)
-  --session-log <file>   Write full session trace as JSONL
-  --no-color             Disable colored output
+  -h, --help                 Show this help
+  -c, --custom-instructions  Custom instructions for all reviewers
+  -k, --keep-temp            Keep .swarm-review/ temp files after run
+  -o, --output <path>        Write final review to <path> (default: review-result.md)
+  -t, --tier <tier>          Override risk tier (trivial | lite | full)
+  -d, --diff <path>          Path to a diff file (skips auto-detection)
+  -r, --repo <path>          Repository root (default: auto-detected from cwd)
+  --ci                        CI mode — JSON output to stdout
 
 EXAMPLES:
-  # Review last commit
-  swarm-review HEAD~1
+  swarm-review                                # Auto-detect & review
+  swarm-review --diff my.patch                # Review a specific patch
+  swarm-review --custom-instructions "focus on auth"  # Custom focus
+  swarm-review --ci                           # JSON output for CI
 
-  # Review staged changes
-  swarm-review --diff staged
-
-  # Review branch vs main, output as JSON
-  swarm-review --diff main...HEAD --format json
-
-  # Review with specific reviewers and custom instructions
-  swarm-review --diff HEAD~3 --reviewers security,quality --instructions "Focus on auth"
-
-  # Use as library in a script:
-  # import { review } from "swarm-review";
-  # const result = await review({ diff: "HEAD~1" });
+AUTO-DETECTION:
+  • Uncommitted changes → review working tree diff
+  • On a feature branch → review commits since diverging from master/main
+  • On master/main       → review last commit
 `);
-}
-
-async function main(): Promise<void> {
-  const config = parseCliArgs();
-
-  if (config.help) {
-    printHelp();
     process.exit(0);
   }
 
-  console.error("Starting swarm review...");
-  console.error(`  Diff: ${config.diff ?? "HEAD~1"}`);
-  console.error(`  CWD:  ${config.cwd ?? process.cwd()}`);
+  const cwd = process.cwd();
+
+  // If --diff provided, read it explicitly
+  const config = values.diff
+    ? {
+        repoRoot: values.repo ?? cwd,
+        diffPath: values.diff,
+        branch: "unknown",
+        tier: (values.tier as any) ?? "full",
+      }
+    : undefined;
 
   try {
-    const result = await review(config);
+    const { resultPath } = await runSwarmReview({
+      cwd,
+      config: config as any,
+      customInstructions: values["custom-instructions"],
+      keepTemp: values["keep-temp"],
+      outputPath: values.output,
+      onProgress: values.ci ? undefined : (msg) => console.error(msg),
+    });
 
-    const useColor = config.color ?? process.stdout.isTTY ?? false;
-    const format = config.format ?? "text";
-    const output = formatOutput(result, format, useColor);
-
-    if (config.outputFile) {
-      writeFileSync(config.outputFile, output, "utf-8");
-      console.error(`Review written to ${config.outputFile}`);
+    if (values.ci) {
+      const content = readFileSync(resultPath, "utf-8");
+      const result = {
+        status: "completed",
+        resultPath,
+        summary: content.slice(0, 500),
+      };
+      console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(output);
+      console.log(`\n✅ Review complete → ${resultPath}`);
     }
 
-    if (result.verdict === "significant_concerns") {
-      process.exit(2);
-    }
-    if (result.verdict === "minor_issues") {
-      process.exit(1);
-    }
     process.exit(0);
-  } catch (err: any) {
-    console.error("Review failed:", err.message);
-    console.error(err.stack);
+  } catch (err) {
+    console.error(`\n❌ Review failed: ${err}`);
     process.exit(1);
   }
 }

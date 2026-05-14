@@ -1,0 +1,77 @@
+{
+  "tiers": {
+    "trivial": {
+      "description": "Typo fixes, trivial doc changes",
+      "maxLinesChanged": 10,
+      "maxFilesChanged": 20,
+      "agentCount": 2,
+      "agents": ["coordinator", "code-quality"],
+      "coordinatorModel": "standard",
+      "avgCost": 0.20
+    },
+    "lite": {
+      "description": "Small features, minor changes",
+      "maxLinesChanged": 100,
+      "maxFilesChanged": 20,
+      "agentCount": 4,
+      "agents": ["coordinator", "code-quality", "documentation", "agents-md"],
+      "coordinatorModel": "standard",
+      "avgCost": 0.67
+    },
+    "full": {
+      "description": "Large changes, refactors, security-sensitive files",
+      "maxLinesChanged": null,
+      "maxFilesChanged": null,
+      "agentCount": 7,
+      "agents": [
+        "coordinator",
+        "code-quality",
+        "security",
+        "performance",
+        "documentation",
+        "codex",
+        "agents-md",
+        "release"
+      ],
+      "coordinatorModel": "top-tier",
+      "avgCost": 1.68
+    }
+  },
+  "securitySensitivePatterns": [
+    "auth/",
+    "crypto/",
+    "oauth",
+    "jwt",
+    "session",
+    "password",
+    "credential",
+    "token",
+    "secret",
+    "certificate",
+    "ssl",
+    "tls",
+    "encrypt",
+    "decrypt",
+    "permission",
+    "rbac",
+    "acl",
+    "authentication",
+    "authorization",
+    "saml",
+    "oidc",
+    "csrf",
+    "cors",
+    "xss",
+    "sql-injection",
+    "sanitize",
+    "validate"
+  ],
+  "timeouts": {
+    "perTask": {
+      "default": 300,
+      "codeQuality": 600
+    },
+    "overall": 1500,
+    "retryBudgetMinimum": 120
+  }
+}
