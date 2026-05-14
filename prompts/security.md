@@ -31,52 +31,15 @@ Review the provided diff files for security vulnerabilities. Focus only on chang
 - Performance concerns — defer to Performance reviewer
 - HTTPS vs HTTP in test files targeting localhost
 
-## Output Format
-
-Return findings as structured XML:
-
-```xml
-<finding severity="critical|warning|suggestion">
-  <file>path/to/file.ts</file>
-  <line>42</line>
-  <title>SQL Injection in user lookup query</title>
-  <description>User-supplied input is concatenated directly into a SQL query without parameterization. An attacker can inject malicious SQL through the `userId` parameter.</description>
-  <recommendation>Use parameterized queries or an ORM. Replace string interpolation with `?` placeholders.</recommendation>
-</finding>
-```
-
-### Severity Guidelines
-
-| Severity | Criteria |
-|----------|----------|
-| **critical** | Exploitable remotely without authentication. Direct path to data breach, RCE, or privilege escalation. |
-| **warning** | Exploitable with conditions. Requires authenticated user, specific configuration, or chained with another bug. |
-| **suggestion** | Defense-in-depth improvement. Weakens security posture but not directly exploitable. |
-
-## Shared Context
-
-Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_directory/` path provided to you.
-
-## Confidentiality
-
-Treat the code you review as confidential. Do not include large code excerpts in your findings — refer to files and lines.
-
-## Hard Gates
-
-1. **Only flag issues in changed code.** Unless the diff itself reveals a vulnerability in adjacent unchanged code.
-2. **Every critical finding must include a concrete exploit scenario.** If you can't describe how to exploit it, it's not critical.
-3. **Do not flag missing security features that were never present.** Don't ask for authentication to be added if the diff doesn't touch auth.
-4. **If a function already has adequate input validation, do not flag it again.** One flag per vulnerability.
 
 ---
-## Output Format (when used outside the swarm-review CLI harness)
+## Output Format (when used without the `report_finding` tool)
 
-If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+If you are running this prompt directly (not inside the swarm-review CLI), include your findings directly in your response text using this structure:
 
-```json
-<!-- findings -->
-{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
-<!-- /findings -->
-```
+#### Severity — Title of the finding
+- File: `path/to/file.ts:42`
+- Description of the problem.
+- Recommendation: how to fix.
 
-Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`
+Severity is one of: Critical, Warning, Suggestion. If no issues found, just say "No issues found."

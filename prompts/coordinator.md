@@ -97,15 +97,51 @@ If this is a re-review:
 
 ## Fallback Output Format (when `submit_review` tool is unavailable)
 
-If you are running this prompt directly without the swarm-review CLI harness (e.g., in Claude Code, ChatGPT, or another agent), output a single JSON object at the end of your response with this exact marker format:
+If you are running this prompt without the swarm-review CLI (e.g., in another agent harness), produce your final answer as a Markdown document following this structure:
 
-```json
-<!-- review -->
-{"verdict":"approved_with_comments","summary":"Brief summary.","findings":[{"severity":"warning","domain":"Code Quality","file":"path/to/file.ts","line":42,"title":"Title","description":"Description","recommendation":"Fix"}]}
-<!-- /review -->
+```markdown
+# Swarm Review Result
+
+- Verdict: `approved`
+
+## Summary
+
+Brief 1-3 sentence summary.
+
+---
+
+## Findings
+
+### Release
+
+#### Warning — Title of the finding
+- File: `path/to/file.ts:42`
+- Description of the issue.
+- Recommendation: how to fix.
+
+---
+
+### Code Quality
+
+#### Critical — Another finding
+- File: `path/to/file.ts:10`
+- Description.
+- Recommendation: fix.
+
+## Domains reviewed
+
+- Code Quality
+- Security
+- Performance
+- Documentation
+- Compliance / codex
+- AGENTS.md
+- Release
 ```
 
-Domain must be one of: Code Quality, Security, Performance, Documentation, Compliance / codex, AGENTS.md, Release.
+Verdict values: `approved`, `approved_with_comments`, `minor_issues`, `significant_concerns`.
+Domain names (for ### headings): Code Quality, Security, Performance, Documentation, Compliance / codex, AGENTS.md, Release.
+Finding headings: `#### Severity — Title` where Severity is Critical, Warning, or Suggestion.
 
 ## Anti-Patterns
 

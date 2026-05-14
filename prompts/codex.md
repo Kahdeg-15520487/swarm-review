@@ -29,48 +29,15 @@ Review the provided diff files for compliance with the engineering codex — the
 - Hypothetical future compliance issues not triggered by this diff
 - Issues that are explicitly waived by a codex exception process
 
-## Output Format
-
-Return findings as structured XML:
-
-```xml
-<finding severity="critical|warning|suggestion">
-  <file>path/to/file.ts</file>
-  <line>42</line>
-  <title>New API endpoint missing standard observability</title>
-  <description>A new POST /api/users endpoint was added without the standard request-id tracing middleware and without a metrics counter for 2xx/4xx/5xx responses per the codex requirement OBS-001.</description>
-  <recommendation>Add the `withTracing` and `withMetrics` middleware wrappers as defined in the codex observability section.</recommendation>
-</finding>
-```
-
-### Severity Guidelines
-
-| Severity | Criteria |
-|----------|----------|
-| **critical** | Violates a mandatory compliance requirement. Regulatory or audit risk. |
-| **warning** | Violates a recommended standard. Will cause operational friction or tech debt. |
-| **suggestion** | Deviation from best practices. Worth addressing but not blocking. |
-
-## Shared Context
-
-Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_directory/` path provided to you.
-
-## Hard Gates
-
-1. **Only enforce documented standards.** If it's not in the codex or an RFC, don't flag it as a compliance issue.
-2. **Cite the specific standard.** Every finding must reference the specific codex rule, RFC, or standard being violated.
-3. **Don't invent standards.** If the organization has no standard on a topic, there is no compliance violation.
-4. **Scope to the diff.** Only flag compliance issues in the changed code.
 
 ---
-## Output Format (when used outside the swarm-review CLI harness)
+## Output Format (when used without the `report_finding` tool)
 
-If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+If you are running this prompt directly (not inside the swarm-review CLI), include your findings directly in your response text using this structure:
 
-```json
-<!-- findings -->
-{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
-<!-- /findings -->
-```
+#### Severity — Title of the finding
+- File: `path/to/file.ts:42`
+- Description of the problem.
+- Recommendation: how to fix.
 
-Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`
+Severity is one of: Critical, Warning, Suggestion. If no issues found, just say "No issues found."

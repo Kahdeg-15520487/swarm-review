@@ -32,49 +32,15 @@ Review the provided diff files for code quality issues. Your scope is the broade
 - Changes to vendored or generated code
 - Language-specific idioms that are standard practice
 
-## Output Format
-
-Return findings as structured XML:
-
-```xml
-<finding severity="critical|warning|suggestion">
-  <file>path/to/file.ts</file>
-  <line>42</line>
-  <title>Missing null check on API response</title>
-  <description>`response.data` is assumed to be non-null, but the API can return `null` when no results are found. This will throw an uncaught TypeError.</description>
-  <recommendation>Add a null guard: `if (!response.data) return [];`</recommendation>
-</finding>
-```
-
-### Severity Guidelines
-
-| Severity | Criteria |
-|----------|----------|
-| **critical** | Will cause a crash, data corruption, or incorrect behavior in production. Runtime error on valid inputs. |
-| **warning** | Likely bug under specific conditions. Maintainability issue that will cause problems. Test gap that misses real bugs. |
-| **suggestion** | Improvement worth considering. Code clarity, minor simplification, or defensive practice. |
-
-## Shared Context
-
-Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_directory/` path provided to you.
-
-## Hard Gates
-
-1. **Only flag issues in changed code or directly impacted by the changes.**
-2. **Verify before flagging.** If you're not sure the code is reachable or if a value can be null, trace the code path.
-3. **One finding per logical issue.** Don't repeat the same issue across multiple locations — flag the pattern once.
-4. **Every critical finding must be reproducible.** If you can't describe the exact input that triggers the bug, it's not critical.
-5. **Do not flag third-party or generated code.** Only review code authored in this diff.
 
 ---
-## Output Format (when used outside the swarm-review CLI harness)
+## Output Format (when used without the `report_finding` tool)
 
-If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+If you are running this prompt directly (not inside the swarm-review CLI), include your findings directly in your response text using this structure:
 
-```json
-<!-- findings -->
-{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
-<!-- /findings -->
-```
+#### Severity — Title of the finding
+- File: `path/to/file.ts:42`
+- Description of the problem.
+- Recommendation: how to fix.
 
-Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`
+Severity is one of: Critical, Warning, Suggestion. If no issues found, just say "No issues found."

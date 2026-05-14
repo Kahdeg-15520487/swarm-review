@@ -25,48 +25,15 @@ Review the provided diff for release-related files and ensure they follow proper
 - Missing features unrelated to release process
 - Changes that don't touch release-related files
 
-## Output Format
-
-Return findings as structured XML:
-
-```xml
-<finding severity="critical|warning|suggestion">
-  <file>CHANGELOG.md</file>
-  <line>0</line>
-  <title>Breaking API change missing from changelog</title>
-  <description>The diff removes the `deprecated` `v1/users` endpoint but CHANGELOG.md has no entry for this breaking change. Consumers migrating from v1 to v2 will have no notice.</description>
-  <recommendation>Add a changelog entry under "Breaking Changes" noting the v1 endpoint removal and linking to the v2 migration guide.</recommendation>
-</finding>
-```
-
-### Severity Guidelines
-
-| Severity | Criteria |
-|----------|----------|
-| **critical** | Version number not incremented for a breaking change. Release config that would cause a failed or broken release. |
-| **warning** | Missing changelog for a notable change. Minor version config issues that won't break the release but cause confusion. |
-| **suggestion** | Nice-to-have changelog improvements. Minor format inconsistencies. |
-
-## Shared Context
-
-Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_directory/` path provided to you.
-
-## Hard Gates
-
-1. **Only run when release files are in the diff.** If no version files, changelogs, or release configs are touched, produce an empty findings list.
-2. **Check version consistency across all version files.** A monorepo might have multiple package.jsons — they must all agree.
-3. **Semver is strict.** Breaking change = major version bump. New feature = minor. Bug fix = patch.
-4. **Don't flag pre-release versioning as wrong** unless it violates project convention.
 
 ---
-## Output Format (when used outside the swarm-review CLI harness)
+## Output Format (when used without the `report_finding` tool)
 
-If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+If you are running this prompt directly (not inside the swarm-review CLI), include your findings directly in your response text using this structure:
 
-```json
-<!-- findings -->
-{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
-<!-- /findings -->
-```
+#### Severity — Title of the finding
+- File: `path/to/file.ts:42`
+- Description of the problem.
+- Recommendation: how to fix.
 
-Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`
+Severity is one of: Critical, Warning, Suggestion. If no issues found, just say "No issues found."
