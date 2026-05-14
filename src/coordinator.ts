@@ -107,6 +107,6 @@ function parseReviewResult(output: string): ReviewResult {
 }
 
 function extractTag(body: string, tag: string): string {
-  const m = body.match(new RegExp(`<${tag}>([\s\S]*?)<\/${tag}>`));
+  const m = body.match(new RegExp(String.raw`<${tag}>([\s\S]*?)<\/${tag}>`));
   return m ? m[1].trim() : "";
 }

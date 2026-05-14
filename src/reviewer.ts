@@ -84,7 +84,11 @@ export async function runReviewer(
 
 function parseFindings(output: string, domain: string): DomainFindings {
   const findings: Finding[] = [];
-  const regex = /<finding\s+severity="(critical|warning|suggestion|none)">([\s\S]*?)<\/finding>/g;
+  // Use String.raw to preserve \s and \S escape sequences in the regex
+  const regex = new RegExp(
+    String.raw`<finding\s+severity="(critical|warning|suggestion|none)">([\s\S]*?)<\/finding>`,
+    "g",
+  );
   let match;
   while ((match = regex.exec(output)) !== null) {
     if (match[1] === "none") continue;
@@ -102,7 +106,7 @@ function parseFindings(output: string, domain: string): DomainFindings {
 }
 
 function extractTag(body: string, tag: string): string {
-  const m = body.match(new RegExp(`<${tag}>([\s\S]*?)<\/${tag}>`));
+  const m = body.match(new RegExp(String.raw`<${tag}>([\s\S]*?)<\/${tag}>`));
   return m ? m[1].trim() : "";
 }
 
