@@ -13,14 +13,18 @@ export async function runReviewer(
   sharedContextPath: string,
   outputPath: string,
   customInstructions?: string,
+  provider?: string,
+  modelId?: string,
 ): Promise<DomainFindings> {
   const promptText = readFileSync(resolve(SKILL_DIR, promptFile), "utf-8");
   const diffSnippet = readFileSync(diffPath, "utf-8").slice(0, 20_000);
   let sharedContext = "";
   try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch { /* optional */ }
 
-  const model = getModel("anthropic", "claude-sonnet-4-20250514");
-  if (!model) throw new Error("No model available. Set ANTHROPIC_API_KEY.");
+  const p = provider ?? "anthropic";
+  const m = modelId ?? "claude-sonnet-4-20250514";
+  const model = getModel(p as any, m as any);
+  if (!model) throw new Error(`Model not found: ${p}/${m}. Check your API key and model name.`);
 
   const domain = extractDomain(promptFile);
 
@@ -32,7 +36,7 @@ export async function runReviewer(
       tools: [],
     },
     streamFn: streamSimpleOpenAICompletions as any,
-    getApiKey: (p: string) => process.env[`${p.toUpperCase()}_API_KEY`] || undefined,
+    getApiKey: (prov: string) => process.env[`${prov.toUpperCase()}_API_KEY`] || undefined,
   });
 
   let output = "";

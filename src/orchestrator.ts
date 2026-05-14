@@ -1,11 +1,9 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { autoDetectConfig, selectReviewers, createSwarmDir } from "./diff.js";
+import { autoDetectConfig, selectReviewers } from "./diff.js";
 import { runReviewer } from "./reviewer.js";
 import { runCoordinator } from "./coordinator.js";
 import type { DomainFindings, ResolvedConfig } from "./types.js";
-
-const SKILL_DIR = resolve(import.meta.dirname, "..");
 
 export interface SwarmReviewOptions {
   /** Working directory (defaults to process.cwd()) */
@@ -20,6 +18,10 @@ export interface SwarmReviewOptions {
   outputPath?: string;
   /** Callback for progress updates */
   onProgress?: (msg: string) => void;
+  /** Model provider (default: anthropic) */
+  provider?: string;
+  /** Model ID for sub-reviewers (default: claude-sonnet-4) */
+  model?: string;
 }
 
 const log = (msg: string, cb?: (s: string) => void) => {
@@ -36,12 +38,14 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
   config: ResolvedConfig;
   resultPath: string;
 }> {
-  const { cwd, customInstructions, keepTemp, outputPath, onProgress } = options;
+  const { cwd, customInstructions, keepTemp, outputPath, onProgress, provider, model } = options;
   const config = options.config ?? (await autoDetectConfig(cwd));
 
+  const modelInfo = model ? `${provider ?? "anthropic"}/${model}` : "default";
   log(`Repository: ${config.repoRoot}`, onProgress);
   log(`Branch: ${config.branch}`, onProgress);
   log(`Risk tier: ${config.tier}`, onProgress);
+  log(`Model: ${modelInfo}`, onProgress);
   log(`Diff: ${config.diffPath}`, onProgress);
 
   const swarmDir = resolve(config.repoRoot, ".swarm-review");
@@ -62,6 +66,8 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
       sharedContextPath,
       resolve(reportsDir, `${r.name}-findings.md`),
       customInstructions,
+      provider,
+      model,
     ).then(
       (findings) => ({ name: r.name, findings }),
       (err) => {
@@ -77,7 +83,7 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
   const totalFindings = allFindings.reduce((s, d) => s + d.findings.length, 0);
   log(`Sub-reviewers complete. Total findings: ${totalFindings}`, onProgress);
 
-  // Coordinator judge pass
+  // Coordinator judge pass (uses a higher-tier model if model wasn't explicitly set)
   log("Running coordinator judge pass...", onProgress);
   const result = await runCoordinator(
     allFindings,
@@ -85,6 +91,8 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
     config.diffPath,
     finalOutputPath,
     customInstructions,
+    provider,
+    model, // if explicit model given, use it; otherwise coordinator uses its own default
   );
 
   // Also write a human-readable summary

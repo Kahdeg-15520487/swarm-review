@@ -13,6 +13,8 @@ export async function runCoordinator(
   diffPath: string,
   outputPath: string,
   customInstructions?: string,
+  provider?: string,
+  modelId?: string,
 ): Promise<ReviewResult> {
   const prompt = readFileSync(resolve(SKILL_DIR, "prompts", "coordinator.md"), "utf-8");
   let sharedContext = "";
@@ -22,8 +24,10 @@ export async function runCoordinator(
     .map((d) => `## ${d.domain}\n${d.findings.map((f) => `- [${f.severity}] ${f.file}:${f.line} — ${f.title}`).join("\n")}`)
     .join("\n\n");
 
-  const model = getModel("anthropic", "claude-opus-4-5");
-  if (!model) throw new Error("No top-tier model available. Set ANTHROPIC_API_KEY.");
+  const p = provider ?? "anthropic";
+  const m = modelId ?? "claude-opus-4-5";
+  const model = getModel(p as any, m as any);
+  if (!model) throw new Error(`Model not found: ${p}/${m}. Check your API key and model name.`);
 
   const agent = new Agent({
     initialState: {
@@ -33,7 +37,7 @@ export async function runCoordinator(
       tools: [],
     },
     streamFn: streamSimpleOpenAICompletions as any,
-    getApiKey: (p: string) => process.env[`${p.toUpperCase()}_API_KEY`] || undefined,
+    getApiKey: (prov: string) => process.env[`${prov.toUpperCase()}_API_KEY`] || undefined,
   });
 
   let output = "";

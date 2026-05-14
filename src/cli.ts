@@ -14,6 +14,8 @@ async function main() {
       tier: { type: "string", short: "t" },
       diff: { type: "string", short: "d" },
       "cwd": { type: "string", short: "C" },
+      "model": { type: "string", short: "m" },
+      "provider": { type: "string", short: "p" },
       ci: { type: "boolean", default: false },
     },
     allowPositionals: false,
@@ -24,10 +26,10 @@ async function main() {
 swarm-review — AI code review swarm
 
 USAGE:
-  swarm-review                      Auto-detect context and review (current dir)
-  swarm-review -C /path/to/repo     Auto-detect in another directory
-  swarm-review --diff path.patch    Review a specific diff file
-  swarm-review --ci                 CI mode (JSON output)
+  swarm-review                            Auto-detect context and review
+  swarm-review -C /path/to/repo           Review another directory
+  swarm-review -m deepseek-v4-flash -p deepseek   Custom model
+  swarm-review --ci                       CI mode (JSON output)
 
 OPTIONS:
   -h, --help                 Show this help
@@ -37,14 +39,17 @@ OPTIONS:
   -o, --output <path>        Write final review to <path> (default: review-result.md)
   -t, --tier <tier>          Override risk tier (trivial | lite | full)
   -d, --diff <path>          Path to a diff file (skips auto-detection)
+  -m, --model <id>           Model ID (default: claude-sonnet-4)
+  -p, --provider <name>      Model provider (default: anthropic)
   --ci                        CI mode — JSON output
 
 EXAMPLES:
-  swarm-review                                # Current directory
+  swarm-review                                # Current dir, auto-detect
   swarm-review -C ~/projects/my-app           # Another repo
-  swarm-review -C ~/projects/my-app --diff HEAD~3
-  swarm-review --diff my.patch                # Specific patch file
+  swarm-review -p deepseek -m deepseek-v4-flash  # Custom model
   swarm-review --ci                           # JSON for pipelines
+
+Set <PROVIDER>_API_KEY env var (e.g. ANTHROPIC_API_KEY, DEEPSEEK_API_KEY).
 `);
     process.exit(0);
   }
@@ -57,6 +62,8 @@ EXAMPLES:
       customInstructions: values["custom-instructions"],
       keepTemp: values["keep-temp"],
       outputPath: values.output,
+      provider: values.provider,
+      model: values.model,
       onProgress: values.ci ? undefined : (msg) => console.error(msg),
     });
 
