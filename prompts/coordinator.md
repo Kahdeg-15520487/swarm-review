@@ -40,65 +40,66 @@ For any finding you are unsure about, use your tools to read the source code and
 
 ## Output Format
 
-Produce a structured review in Markdown with the following sections. The **verdict** and **domain names** must use the exact XML tags shown below (they are parsed programmatically), but everything else is plain Markdown.
+Produce a clean Markdown review. Use the exact headings shown below — they are parsed programmatically.
 
 ```markdown
 # Swarm Review
 
-<verdict>approved|approved_with_comments|minor_issues|significant_concerns</verdict>
+## Verdict
 
-<summary>
+approved
+
+## Summary
+
 Brief 1-2 sentence summary of the review outcome.
-</summary>
 
 ---
 
 ## Findings
 
-### 🔴 Critical
-<!-- omit section if none -->
+### code_quality
 
-<domain name="security">
-### 🔴 Critical
-#### title
-- **File:** `path/to/file.ts:42`
-- **Severity:** critical
-- **Description:** Clear explanation of the problem and why it matters.
+#### [warning] Title of the finding
+- **File:** `path/to/file.ts:25`
+- **Description:** Clear explanation of the problem.
 - **Recommendation:** How to fix it.
 
 ---
-</domain>
 
-<domain name="performance">
-<!-- performance findings, same structure -->
-</domain>
-
-<domain name="code_quality">
-
-#### title
-- **File:** `path/to/file.ts:25`
-- **Severity:** warning
+#### [suggestion] Another finding
+- **File:** `path/to/file.ts:42`
 - **Description:** ...
 - **Recommendation:** ...
 
 ---
 
-</domain>
+### security
 
-<domain name="documentation">
-</domain>
+#### [critical] Title
+- **File:** `path/to/file.ts:10`
+- **Description:** ...
+- **Recommendation:** ...
 
-<domain name="compliance">
-</domain>
+---
 
-<domain name="agents_md">
-</domain>
+### performance
 
-<domain name="release">
-</domain>
+### documentation
+
+### compliance
+
+### agents_md
+
+### release
 ```
 
-**Important:** The `<verdict>`, `<summary>`, and `<domain name="...">` XML tags MUST be present exactly as shown — they are parsed by the tooling. Everything else is free-form Markdown. If no issues were found, omit the domain section entirely.
+**Rules:**
+- Domain sections use ### headings: `### code_quality`, `### security`, `### performance`, `### documentation`, `### compliance`, `### agents_md`, `### release`
+- Omit domain sections that have no findings
+- Each finding starts with `#### [severity] Title` (severity: critical, warning, or suggestion)
+- Verdict must be one of: `approved`, `approved_with_comments`, `minor_issues`, `significant_concerns`
+- No XML tags anywhere
+- No markdown code fences wrapping the output
 ```
 
 ## Verdict Rubric

@@ -2,11 +2,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
-import type { DomainFindings, ReviewResult, Verdict } from "./types.js";
+import type { DomainFindings, ReviewResult, Verdict, Finding } from "./types.js";
 
 const SKILL_DIR = resolve(import.meta.dirname, "..");
 
-/** Run the coordinator judge pass as a standalone agent session */
 export async function runCoordinator(
   allFindings: DomainFindings[],
   sharedContextPath: string,
@@ -18,16 +17,16 @@ export async function runCoordinator(
 ): Promise<ReviewResult> {
   const prompt = readFileSync(resolve(SKILL_DIR, "prompts", "coordinator.md"), "utf-8");
   let sharedContext = "";
-  try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch { /* optional */ }
+  try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch {}
 
   const findingsText = allFindings
-    .map((d) => `## ${d.domain}\n${d.findings.map((f) => `- [${f.severity}] ${f.file}:${f.line} — ${f.title}`).join("\n")}`)
+    .map((d) => `## ${d.domain}\n${d.findings.map((f) => `- [${f.severity}] ${f.file}:${f.line} \u2014 ${f.title}`).join("\n")}`)
     .join("\n\n");
 
   const p = provider ?? "anthropic";
   const m = modelId ?? "claude-opus-4-5";
   const model = getModel(p as any, m as any);
-  if (!model) throw new Error(`Model not found: ${p}/${m}. Check your API key and model name.`);
+  if (!model) throw new Error(`Model not found: ${p}/${m}.`);
 
   const agent = new Agent({
     initialState: {
@@ -71,42 +70,82 @@ export async function runCoordinator(
 }
 
 function parseReviewResult(output: string): ReviewResult {
-  const verdictMatch = output.match(/<verdict>(.*?)<\/verdict>/);
-  const summaryMatch = output.match(/<summary>([\s\S]*?)<\/summary>/);
-
-  const verdict: Verdict = (verdictMatch?.[1]?.trim() as Verdict) ?? "minor_issues";
-
-  const findings: DomainFindings[] = [];
-  const domainRegex = /<domain\s+name="(.*?)">([\s\S]*?)<\/domain>/g;
-  let domainMatch;
-  while ((domainMatch = domainRegex.exec(output)) !== null) {
-    const domain = domainMatch[1];
-    const body = domainMatch[2];
-    const findingRegex = /<finding\s+severity="(critical|warning|suggestion)">([\s\S]*?)<\/finding>/g;
-    const findingsList = [];
-    let fm;
-    while ((fm = findingRegex.exec(body)) !== null) {
-      const fbody = fm[2];
-      findingsList.push({
-        severity: fm[1] as any,
-        file: extractTag(fbody, "file") || "",
-        line: Number(extractTag(fbody, "line")) || 0,
-        title: extractTag(fbody, "title") || "",
-        description: extractTag(fbody, "description") || "",
-        recommendation: extractTag(fbody, "recommendation") || "",
-      });
-    }
-    findings.push({ domain, findings: findingsList });
+  // Extract verdict: first line after "## Verdict" heading
+  const lines = output.split("\n");
+  const verdictIdx = lines.findIndex((l) => l.startsWith("## Verdict"));
+  let verdict: Verdict = "minor_issues";
+  if (verdictIdx >= 0 && verdictIdx + 2 < lines.length) {
+    const v = lines[verdictIdx + 2]?.trim();
+    if (v) verdict = v as Verdict;
   }
 
-  return {
-    verdict,
-    summary: summaryMatch?.[1]?.trim() ?? "",
-    findings,
-  };
-}
+  // Extract summary: text between "## Summary" and "## Findings"
+  const summaryIdx = lines.findIndex((l) => l.startsWith("## Summary"));
+  const findingsIdx = lines.findIndex((l) => l.startsWith("## Findings"));
+  let summary = "";
+  if (summaryIdx >= 0 && findingsIdx > summaryIdx) {
+    summary = lines.slice(summaryIdx + 2, findingsIdx).join("\n").trim();
+  }
 
-function extractTag(body: string, tag: string): string {
-  const m = body.match(new RegExp(String.raw`<${tag}>([\s\S]*?)<\/${tag}>`));
-  return m ? m[1].trim() : "";
+  // Extract domain sections by looking for "### <domain>" headings
+  const domainNames = ["code_quality", "security", "performance", "documentation", "compliance", "agents_md", "release"];
+  const findings: DomainFindings[] = [];
+
+  for (const domain of domainNames) {
+    const domainIdx = lines.findIndex((l) => l.trim() === "### " + domain);
+    if (domainIdx < 0) continue;
+
+    // Find next domain heading or next ## heading
+    let endIdx = lines.length;
+    for (let i = domainIdx + 1; i < lines.length; i++) {
+      const t = lines[i].trim();
+      if (t.startsWith("### ") || t.startsWith("## ")) {
+        endIdx = i;
+        break;
+      }
+    }
+
+    const bodyLines = lines.slice(domainIdx + 1, endIdx);
+    const body = bodyLines.join("\n");
+
+    // Extract findings: lines starting with "#### [severity]"
+    const findingList: Finding[] = [];
+    let i = 0;
+    while (i < bodyLines.length) {
+      const findingMatch = bodyLines[i].match(/^#### \[(critical|warning|suggestion)\] (.+)/);
+      if (!findingMatch) { i++; continue; }
+
+      const severity = findingMatch[1] as Finding["severity"];
+      const title = findingMatch[2].trim();
+      i++;
+
+      // Collect detail lines until next #### or ---
+      let detail = "";
+      while (i < bodyLines.length && !bodyLines[i].match(/^#### \[/) && !bodyLines[i].match(/^---/)) {
+        detail += bodyLines[i] + "\n";
+        i++;
+      }
+
+      const fileMatch = detail.match(/^\*\*File:\*\*\s*`(.+?)`/m);
+      const descMatch = detail.match(/^\*\*Description:\*\*\s+(.+)/m);
+      const recMatch = detail.match(/^\*\*Recommendation:\*\*\s+(.+)/m);
+
+      const file = fileMatch?.[1]?.trim() ?? "";
+      const lineNumMatch = file.match(/:(\d+)$/);
+      const line = lineNumMatch ? parseInt(lineNumMatch[1], 10) : 0;
+
+      findingList.push({
+        severity,
+        file: file.replace(/:\d+$/, ""),
+        line,
+        title,
+        description: descMatch?.[1]?.trim() ?? "",
+        recommendation: recMatch?.[1]?.trim() ?? "",
+      });
+    }
+
+    findings.push({ domain, findings: findingList });
+  }
+
+  return { verdict, summary, findings };
 }
