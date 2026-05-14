@@ -65,3 +65,16 @@ Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_direc
 3. **One finding per logical issue.** Don't repeat the same issue across multiple locations — flag the pattern once.
 4. **Every critical finding must be reproducible.** If you can't describe the exact input that triggers the bug, it's not critical.
 5. **Do not flag third-party or generated code.** Only review code authored in this diff.
+
+---
+## Output Format (when used outside the swarm-review CLI harness)
+
+If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+
+```json
+<!-- findings -->
+{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
+<!-- /findings -->
+```
+
+Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`

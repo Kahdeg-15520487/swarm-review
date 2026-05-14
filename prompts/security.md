@@ -67,3 +67,16 @@ Treat the code you review as confidential. Do not include large code excerpts in
 2. **Every critical finding must include a concrete exploit scenario.** If you can't describe how to exploit it, it's not critical.
 3. **Do not flag missing security features that were never present.** Don't ask for authentication to be added if the diff doesn't touch auth.
 4. **If a function already has adequate input validation, do not flag it again.** One flag per vulnerability.
+
+---
+## Output Format (when used outside the swarm-review CLI harness)
+
+If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+
+```json
+<!-- findings -->
+{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
+<!-- /findings -->
+```
+
+Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`

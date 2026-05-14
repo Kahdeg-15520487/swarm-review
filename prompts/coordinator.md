@@ -51,6 +51,18 @@ After you finish your analysis, call the **`submit_review`** tool with:
 
 The `submit_review` tool's schema defines the exact structure — follow it precisely.
 Do NOT include findings in your text response. Only call `submit_review` once.
+
+## Fallback Output Format (when \`submit_review\` tool is unavailable)
+
+If you are running this prompt directly without the swarm-review CLI (e.g., in Claude Code, ChatGPT, or another agent harness), output a single JSON object at the end of your response with this marker format:
+
+```json
+<!-- review -->
+{"verdict":"approved_with_comments","summary":"Brief summary.","findings":[{"severity":"warning","domain":"Code Quality","file":"path/to/file.ts","line":42,"title":"Title","description":"Description","recommendation":"Fix"}]}
+<!-- /review -->
+```
+
+Domain must be one of: Code Quality, Security, Performance, Documentation, Compliance / codex, AGENTS.md, Release.
 ```
 
 ## Verdict Rubric

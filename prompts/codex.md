@@ -61,3 +61,16 @@ Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_direc
 2. **Cite the specific standard.** Every finding must reference the specific codex rule, RFC, or standard being violated.
 3. **Don't invent standards.** If the organization has no standard on a topic, there is no compliance violation.
 4. **Scope to the diff.** Only flag compliance issues in the changed code.
+
+---
+## Output Format (when used outside the swarm-review CLI harness)
+
+If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+
+```json
+<!-- findings -->
+{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
+<!-- /findings -->
+```
+
+Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`

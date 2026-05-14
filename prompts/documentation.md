@@ -59,3 +59,16 @@ Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_direc
 2. **Prefer brevity.** Flag what's missing; don't write the documentation yourself.
 3. **Distinguish public from internal.** Internal/private code has a lower documentation bar than public API surfaces.
 4. **Check both sides.** New code added without docs AND existing docs that contradict new code.
+
+---
+## Output Format (when used outside the swarm-review CLI harness)
+
+If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+
+```json
+<!-- findings -->
+{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
+<!-- /findings -->
+```
+
+Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`

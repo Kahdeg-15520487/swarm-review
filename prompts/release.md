@@ -57,3 +57,16 @@ Read `shared-mr-context.txt` for MR metadata. Patch files are in the `diff_direc
 2. **Check version consistency across all version files.** A monorepo might have multiple package.jsons — they must all agree.
 3. **Semver is strict.** Breaking change = major version bump. New feature = minor. Bug fix = patch.
 4. **Don't flag pre-release versioning as wrong** unless it violates project convention.
+
+---
+## Output Format (when used outside the swarm-review CLI harness)
+
+If you are running this prompt directly (not inside the swarm-review CLI wrapper that provides the `report_finding` tool), append your findings as a JSON array at the end of your response using this exact marker format:
+
+```json
+<!-- findings -->
+{"severity":"critical|warning|suggestion","file":"path/to/file.ts","line":42,"title":"Short title","description":"Clear explanation.","recommendation":"How to fix."}
+<!-- /findings -->
+```
+
+Output one JSON object per finding. If no issues found, output an empty array: `<!-- findings -->` + `[]` + `<!-- /findings -->`
