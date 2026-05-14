@@ -1,22 +1,57 @@
 # Swarm Review
 
-Orchestrated AI code review using specialized agents.
+Orchestrated AI code review using a coordinated swarm of specialized agents.
 
-Dispatches security, performance, and code quality reviewers in parallel, then a coordinator deduplicates findings and produces a final verdict. Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review.
-
-**[See it in action →](https://github.com/Kahdeg-15520487/swarm-review/pull/1)** — a PR with intentionally buggy code, reviewed automatically by Swarm Review.
+Dispatches up to **7 domain-specific reviewers** (security, performance, code quality, documentation, compliance, release, AGENTS.md) in parallel based on risk tier, then a coordinator agent deduplicates findings and produces a single structured verdict. Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review.
 
 ## How It Works
 
-1. Extract git diff from your repository
-2. Filter noise (lock files, minified assets, vendored deps)
-3. Assess risk tier (trivial / lite / full)
-4. Dispatch specialized reviewers in parallel:
-   - **Security** — injection, auth bypass, secrets
-   - **Performance** — N+1 queries, memory leaks, algorithmic issues
-   - **Code Quality** — logic errors, dead code, error handling
-5. Coordinator deduplicates, re-categorizes, judges severity
-6. Output structured review in text, JSON, or markdown
+```
+                    ┌─────────────────────┐
+                    │   Risk Assessment   │
+                    │  (diff → trivial /  │
+                    │   lite / full)      │
+                    └──────┬─────────────┘
+                           │
+                    ┌──────▼─────────────┐
+                    │   Coordinator      │
+                    │   (spawn + judge)  │
+                    └──────┬─────────────┘
+                           │
+              ┌────────────┼────────────┬──────────────┐
+              ▼             ▼            ▼              ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────┐  ┌──────────┐
+        │ Security │ │ Perf     │ │ Code     │  │ Doc      │
+        │ Reviewer │ │ Reviewer │ │ Quality  │  │ Reviewer │
+        └──────────┘ └──────────┘ └──────────┘  └──────────┘
+              │             │            │              │
+              └─────────────┼────────────┼──────────────┘
+                            ▼            ▼
+                     ┌──────────────────────┐
+                     │  Coordinator Judge   │
+                     │  (dedup, filter,     │
+                     │   verdict)           │
+                     └──────────────────────┘
+```
+
+1. **Auto-detect** git context — uncommitted changes, branch diff, or last commit
+2. **Filter noise** — lock files, minified assets, vendored deps, generated files
+3. **Assess risk tier** — trivial (2 agents), lite (4 agents), full (7+ agents)
+4. **Spawn specialized reviewers in parallel** — each with a scoped prompt
+5. **Coordinator judge pass** — deduplicates, re-categorizes, filters false positives, produces verdict
+6. **Output** — `review-result.md` in the project root
+
+### Sub-Reviewers
+
+| Reviewer | Domain | Runs On |
+|----------|--------|---------|
+| **Code Quality** | Logic errors, null safety, error handling, test quality | Always |
+| **Security** | Injection, auth bypass, secrets, crypto, input validation | Full + security-sensitive files |
+| **Performance** | Algorithmic complexity, N+1 queries, allocations, sync I/O | Full |
+| **Documentation** | Missing/outdated docs, changelogs, migration guides | Lite / Full |
+| **Engineering Codex** | Internal compliance, observability, standards | Full |
+| **AGENTS.md** | AI context freshness, materiality assessment | Lite / Full |
+| **Release** | Versioning, changelogs, breaking changes | Full |
 
 ## Install
 
@@ -27,65 +62,66 @@ npm install swarm-review
 Or use directly:
 
 ```bash
-npx swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek
+npx swarm-review
 ```
 
 ## CLI Usage
 
 ```bash
-# Set your API key
-export DEEPSEEK_API_KEY=sk-...
+# Auto-detect: review uncommitted changes, branch diff, or last commit
+swarm-review
 
-# Review last commit
-npx swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek
+# Explicit git ref range
+swarm-review --diff HEAD~3
 
-# Review staged changes
-npx swarm-review --diff staged --model deepseek-v4-flash --provider deepseek
+# Review a specific diff file
+swarm-review --diff my.patch
 
-# Review branch vs main, output JSON
-npx swarm-review --diff main...HEAD --format json --model deepseek-v4-flash --provider deepseek
-
-# Only security + quality reviewers
-npx swarm-review --diff HEAD~3 --reviewers security,quality --model deepseek-v4-flash --provider deepseek
+# CI mode — JSON output
+swarm-review --ci
 
 # Custom instructions
-npx swarm-review --diff HEAD~1 --instructions "Focus on authentication logic" --model deepseek-v4-flash --provider deepseek
+swarm-review --custom-instructions "Focus on authentication logic only"
+
+# Override risk tier
+swarm-review --tier full
+
+# Custom output path
+swarm-review --output review-output.md
+
+# Keep temp files for debugging
+swarm-review --keep-temp
 ```
 
-**Supported providers:** Any provider supported by `@earendil-works/pi-ai`. Set the corresponding `*_API_KEY` environment variable (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`).
+**API keys:** Set `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or configure via `~/.pi/agent/auth.json`.
 
 ## Library Usage
 
 ```typescript
 import { review } from "swarm-review";
 
-const result = await review({
-  diff: "main...HEAD",
-  model: "deepseek-v4-flash",
-  provider: "deepseek",
+const { verdict, resultPath } = await review({
+  customInstructions: "Focus on auth changes",
 });
 
-console.log(result.verdict);    // "approved" | "approved_with_comments" | "minor_issues" | "significant_concerns"
-console.log(result.findings);   // Finding[]
-console.log(result.summary);    // string
-console.log(result.totalUsage); // { inputTokens, outputTokens, cost }
+console.log(verdict);   // "approved" | "approved_with_comments" | "minor_issues" | "significant_concerns"
+console.log(resultPath); // path to review-result.md
+```
+
+Programmatic API with full control:
+
+```typescript
+import { runSwarmReview } from "swarm-review";
+
+const { config, resultPath } = await runSwarmReview({
+  cwd: process.cwd(),
+  customInstructions: "Skip docs reviewer",
+  keepTemp: false,
+  onProgress: (msg) => console.log(`[review] ${msg}`),
+});
 ```
 
 ## CI/CD Integration
-
-### Quick setup
-
-1. Add `DEEPSEEK_API_KEY` to your repo secrets (**Settings → Secrets and variables → Actions**)
-2. Copy `.github/workflows/ci.yml` into your repo
-3. (Optional) Enable branch protection: require the `review` job to pass before merging
-
-### What the workflow does
-
-- On every PR to `master`: builds, typechecks, then runs swarm-review
-- Posts the review as a PR comment with verdict
-- Fails the check if verdict is `significant_concerns` (exit code 2)
-
-### Minimal workflow
 
 ```yaml
 on:
@@ -95,8 +131,6 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -105,51 +139,33 @@ jobs:
         with:
           node-version: 22
       - run: npm install -g swarm-review
-      - run: |
-          swarm-review \
-            --diff ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
-            --format markdown \
-            --model deepseek-v4-flash \
-            --provider deepseek \
-            --no-color \
-            > review.md
+      - run: swarm-review --ci
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
-
-Exit codes: `0` = approved, `1` = minor issues, `2` = significant concerns.
-
-## Configuration
-
-| Option | CLI Flag | Default | Description |
-|--------|----------|---------|-------------|
-| `diff` | `--diff` | `HEAD~1` | Git ref range, "staged", or "unstaged" |
-| `cwd` | `--cwd` | `process.cwd()` | Repository root |
-| `model` | `--model` | required | Model ID (e.g. `deepseek-v4-flash`) |
-| `provider` | `--provider` | required | Model provider (e.g. `deepseek`) |
-| `reviewers` | `--reviewers` | auto (by risk tier) | Comma-separated: security,performance,quality |
-| `riskTier` | `--risk-tier` | auto-assessed | trivial, lite, or full |
-| `format` | `--format` | text | Output: text, json, markdown |
-| `output` | `--output` | stdout | Write output to file |
-| `timeout` | `--timeout` | 300000 | Per-reviewer timeout (ms) |
-| `concurrency` | `--concurrency` | 3 | Max concurrent reviewers |
-| `instructions` | `--instructions` | none | Custom instructions for all reviewers |
-| `thinkingLevel` | `--thinking-level` | medium | LLM thinking: off, low, medium, high |
 
 ## Risk Tiers
 
-The tool automatically assesses the diff and selects reviewers:
+| Tier | Lines Changed | Files Changed | Agents |
+|------|--------------|---------------|--------|
+| **trivial** | ≤10 | ≤20 | Code Quality + coordinator |
+| **lite** | ≤100 | ≤20 | + Documentation, AGENTS.md |
+| **full** | >100 or >50 files or security-sensitive | Any | All 7 specialists |
 
-| Tier | Lines | Reviewers |
-|------|-------|-----------|
-| **trivial** | ≤10 lines | quality only |
-| **lite** | ≤100 lines | quality + security |
-| **full** | >100 lines or security-sensitive files | all three |
+## Auto-Detection
 
-Override with `--risk-tier` or `--reviewers`.
+| State | What Gets Reviewed |
+|-------|-------------------|
+| Uncommitted changes exist | Working tree diff |
+| On a feature branch | Commits since diverging from master/main |
+| On master/main | Last commit |
 
 ## Requirements
 
 - Node.js >= 22
-- An API key for at least one LLM provider
+- An API key for at least one LLM provider (Anthropic, OpenAI, etc.)
 - A git repository
+
+## License
+
+MIT
