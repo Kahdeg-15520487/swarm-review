@@ -3,24 +3,16 @@ import { resolve } from "node:path";
 import { autoDetectConfig, selectReviewers } from "./diff.js";
 import { runReviewer } from "./reviewer.js";
 import { runCoordinator } from "./coordinator.js";
-import type { DomainFindings, ResolvedConfig } from "./types.js";
+import type { DomainFindings, ResolvedConfig, ReviewResult } from "./types.js";
 
 export interface SwarmReviewOptions {
-  /** Working directory (defaults to process.cwd()) */
   cwd?: string;
-  /** Explicit config — skips auto-detection */
   config?: ResolvedConfig;
-  /** Custom instructions injected into all reviewer prompts */
   customInstructions?: string;
-  /** Skip cleanup of .swarm-review dir after completion */
   keepTemp?: boolean;
-  /** Path to write the final review result */
   outputPath?: string;
-  /** Callback for progress updates */
   onProgress?: (msg: string) => void;
-  /** Model provider (default: anthropic) */
   provider?: string;
-  /** Model ID for sub-reviewers (default: claude-sonnet-4) */
   model?: string;
 }
 
@@ -29,11 +21,64 @@ const log = (msg: string, cb?: (s: string) => void) => {
   else console.error(`[swarm-review] ${msg}`);
 };
 
-/**
- * Run a full swarm review.
- * Auto-detects git context, spawns reviewers in parallel,
- * runs the coordinator judge pass, and produces review-result.md.
- */
+/** Render a structured ReviewResult to Markdown */
+function renderMarkdown(result: ReviewResult): string {
+  const lines: string[] = [];
+  lines.push("# Swarm Review Result");
+  lines.push("");
+  lines.push(`- Verdict: \`${result.verdict.replace(/_/g, " ")}\``);
+  lines.push("");
+  lines.push("## Summary");
+  lines.push("");
+  lines.push(result.summary);
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push("## Findings");
+  lines.push("");
+
+  for (const domain of result.findings) {
+    if (domain.findings.length === 0) continue;
+
+    const domainTitle = domainNameToTitle(domain.domain);
+    lines.push(`### ${domainTitle}`);
+    lines.push("");
+
+    for (const f of domain.findings) {
+      const sevLabel = f.severity.charAt(0).toUpperCase() + f.severity.slice(1);
+      lines.push(`#### ${sevLabel} \u2014 ${f.title}`);
+      lines.push(`- File: \`${f.file}${f.line ? ":" + f.line : ""}\``);
+      lines.push(`- ${f.description}`);
+      if (f.recommendation) {
+        lines.push(`- Recommendation: ${f.recommendation}`);
+      }
+      lines.push("");
+    }
+  }
+
+  lines.push("## Domains reviewed");
+  lines.push("");
+  const allDomains = ["Code Quality", "Security", "Performance", "Documentation", "Compliance / codex", "AGENTS.md", "Release"];
+  for (const d of allDomains) {
+    lines.push(`- ${d}`);
+  }
+
+  return lines.join("\n");
+}
+
+function domainNameToTitle(domain: string): string {
+  const map: Record<string, string> = {
+    code_quality: "Code Quality",
+    security: "Security",
+    performance: "Performance",
+    documentation: "Documentation",
+    compliance: "Compliance / codex",
+    agents_md: "AGENTS.md",
+    release: "Release",
+  };
+  return map[domain] ?? domain;
+}
+
 export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<{
   config: ResolvedConfig;
   resultPath: string;
@@ -49,7 +94,6 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
   log(`Diff: ${config.diffPath}`, onProgress);
 
   const swarmDir = resolve(config.repoRoot, ".swarm-review");
-  const reportsDir = resolve(swarmDir, "reports");
   const sharedContextPath = resolve(swarmDir, "shared-mr-context.txt");
   const finalOutputPath = outputPath ?? resolve(config.repoRoot, "review-result.md");
 
@@ -57,21 +101,20 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
   const reviewers = selectReviewers(config.tier);
   log(`Selected ${reviewers.length} reviewers: ${reviewers.map((r) => r.name).join(", ")}`, onProgress);
 
-  // Run all sub-reviewers in parallel
+  // Run all sub-reviewers in parallel — they return findings directly via tools
   log("Launching sub-reviewers...", onProgress);
   const reviewerTasks = reviewers.map((r) =>
     runReviewer(
       r.promptFile,
       config.diffPath,
       sharedContextPath,
-      resolve(reportsDir, `${r.name}-findings.md`),
       customInstructions,
       provider,
       model,
     ).then(
       (findings) => ({ name: r.name, findings }),
       (err) => {
-        log(`  ⚠ ${r.name} failed: ${err}`, onProgress);
+        log(`  \u26a0 ${r.name} failed: ${err}`, onProgress);
         return { name: r.name, findings: { domain: r.name, findings: [] } as DomainFindings };
       },
     )
@@ -79,36 +122,25 @@ export async function runSwarmReview(options: SwarmReviewOptions = {}): Promise<
 
   const reviewerResults = await Promise.all(reviewerTasks);
   const allFindings = reviewerResults.map((r) => r.findings);
-
   const totalFindings = allFindings.reduce((s, d) => s + d.findings.length, 0);
   log(`Sub-reviewers complete. Total findings: ${totalFindings}`, onProgress);
 
-  // Coordinator judge pass (uses a higher-tier model if model wasn't explicitly set)
+  // Coordinator judge pass
   log("Running coordinator judge pass...", onProgress);
   const result = await runCoordinator(
     allFindings,
     sharedContextPath,
     config.diffPath,
-    finalOutputPath,
     customInstructions,
     provider,
-    model, // if explicit model given, use it; otherwise coordinator uses its own default
+    model,
   );
-
-  // Also write a human-readable summary
-  const summaryPath = resolve(reportsDir, "all-findings.md");
-  const summary = allFindings
-    .map(
-      (d) => `## ${d.domain}\n${d.findings.length > 0
-        ? d.findings.map((f) => `- **[${f.severity}]** ${f.file}:${f.line} — ${f.title}\n  ${f.description}`).join("\n\n")
-        : "_No findings._"
-      }`,
-    )
-    .join("\n\n");
-  writeFileSync(summaryPath, summary);
-
   log(`Verdict: ${result.verdict}`, onProgress);
   log(`Final review: ${finalOutputPath}`, onProgress);
+
+  // Render structured result to Markdown and write to file
+  const markdown = renderMarkdown(result);
+  writeFileSync(finalOutputPath, markdown, "utf-8");
 
   // Cleanup intermediary files
   if (!keepTemp && existsSync(swarmDir)) {

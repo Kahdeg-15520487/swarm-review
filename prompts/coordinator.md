@@ -38,68 +38,19 @@ Drop items that are:
 
 For any finding you are unsure about, use your tools to read the source code and verify. Do not pass through unverified claims.
 
-## Output Format
+## Output
 
-Produce a clean Markdown review. Use the exact headings shown below — they are parsed programmatically.
+After you finish your analysis, call the **`submit_review`** tool with:
 
-```markdown
-# Swarm Review
+- **verdict** — one of: `approved`, `approved_with_comments`, `minor_issues`, `significant_concerns`
+- **summary** — 1-3 sentence summary
+- **findings** — array of consolidated findings, each with:
+  - `severity` — critical | warning | suggestion
+  - `domain` — which domain (Code Quality, Security, Performance, Documentation, Compliance / codex, AGENTS.md, Release)
+  - `title`, `description`, `file`, `line` (optional), `recommendation`
 
-## Verdict
-
-approved
-
-## Summary
-
-Brief 1-2 sentence summary of the review outcome.
-
----
-
-## Findings
-
-### code_quality
-
-#### [warning] Title of the finding
-- **File:** `path/to/file.ts:25`
-- **Description:** Clear explanation of the problem.
-- **Recommendation:** How to fix it.
-
----
-
-#### [suggestion] Another finding
-- **File:** `path/to/file.ts:42`
-- **Description:** ...
-- **Recommendation:** ...
-
----
-
-### security
-
-#### [critical] Title
-- **File:** `path/to/file.ts:10`
-- **Description:** ...
-- **Recommendation:** ...
-
----
-
-### performance
-
-### documentation
-
-### compliance
-
-### agents_md
-
-### release
-```
-
-**Rules:**
-- Domain sections use ### headings: `### code_quality`, `### security`, `### performance`, `### documentation`, `### compliance`, `### agents_md`, `### release`
-- Omit domain sections that have no findings
-- Each finding starts with `#### [severity] Title` (severity: critical, warning, or suggestion)
-- Verdict must be one of: `approved`, `approved_with_comments`, `minor_issues`, `significant_concerns`
-- No XML tags anywhere
-- No markdown code fences wrapping the output
+The `submit_review` tool's schema defines the exact structure — follow it precisely.
+Do NOT include findings in your text response. Only call `submit_review` once.
 ```
 
 ## Verdict Rubric
