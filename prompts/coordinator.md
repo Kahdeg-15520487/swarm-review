@@ -40,52 +40,65 @@ For any finding you are unsure about, use your tools to read the source code and
 
 ## Output Format
 
-Produce a structured review with the following sections:
+Produce a structured review in Markdown with the following sections. The **verdict** and **domain names** must use the exact XML tags shown below (they are parsed programmatically), but everything else is plain Markdown.
 
-```xml
-<review>
-  <verdict>approved|approved_with_comments|minor_issues|significant_concerns</verdict>
-  <summary>
-    Brief 1-2 sentence summary of the review outcome.
-  </summary>
+```markdown
+# Swarm Review
 
-  <findings>
-    <!-- Each finding in its domain section -->
-    <domain name="security">
-      <finding severity="critical|warning|suggestion">
-        <file>path/to/file.ts</file>
-        <line>42</line>
-        <title>Short title of the issue</title>
-        <description>Clear explanation of the problem and why it matters.</description>
-        <recommendation>How to fix it.</recommendation>
-      </finding>
-    </domain>
+<verdict>approved|approved_with_comments|minor_issues|significant_concerns</verdict>
 
-    <domain name="performance">
-      <!-- performance findings -->
-    </domain>
+<summary>
+Brief 1-2 sentence summary of the review outcome.
+</summary>
 
-    <domain name="code_quality">
-      <!-- code quality findings -->
-    </domain>
+---
 
-    <domain name="documentation">
-      <!-- documentation findings -->
-    </domain>
+## Findings
 
-    <domain name="compliance">
-      <!-- engineering codex / compliance findings -->
-    </domain>
+### 🔴 Critical
+<!-- omit section if none -->
 
-    <domain name="agents_md">
-      <!-- AGENTS.md findings -->
-    </domain>
+<domain name="security">
+### 🔴 Critical
+#### title
+- **File:** `path/to/file.ts:42`
+- **Severity:** critical
+- **Description:** Clear explanation of the problem and why it matters.
+- **Recommendation:** How to fix it.
 
-    <domain name="release">
-      <!-- release findings -->
-    </domain>
-  </findings>
-</review>
+---
+</domain>
+
+<domain name="performance">
+<!-- performance findings, same structure -->
+</domain>
+
+<domain name="code_quality">
+
+#### title
+- **File:** `path/to/file.ts:25`
+- **Severity:** warning
+- **Description:** ...
+- **Recommendation:** ...
+
+---
+
+</domain>
+
+<domain name="documentation">
+</domain>
+
+<domain name="compliance">
+</domain>
+
+<domain name="agents_md">
+</domain>
+
+<domain name="release">
+</domain>
+```
+
+**Important:** The `<verdict>`, `<summary>`, and `<domain name="...">` XML tags MUST be present exactly as shown — they are parsed by the tooling. Everything else is free-form Markdown. If no issues were found, omit the domain section entirely.
 ```
 
 ## Verdict Rubric
