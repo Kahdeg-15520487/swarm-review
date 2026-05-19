@@ -1,2 +1,9 @@
 node_modules
 dist/
+__pycache__/
+*.log
+.env
+.DS_Store
+.vscode/
+*.pptx
+*.py

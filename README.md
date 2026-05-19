@@ -2,9 +2,39 @@
 
 Orchestrated AI code review using specialized agents.
 
-Dispatches security, performance, and code quality reviewers in parallel, then a coordinator deduplicates findings and produces a final verdict. Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review.
+Dispatches specialized reviewers in parallel, then a coordinator deduplicates findings and produces a final verdict. Inspired by [Cloudflare's approach](https://blog.cloudflare.com/ai-code-review) to multi-agent code review.
 
 **[See it in action →](https://github.com/Kahdeg-15520487/swarm-review/pull/1)** — a PR with intentionally buggy code, reviewed automatically by Swarm Review.
+
+## Quick Install
+
+| How | Harness | Steps |
+|-----|---------|-------|
+| **npm CLI** | Any (CI/CD, scripts) | `npm install -g swarm-review` |
+| **Agentic skill** | Copilot CLI | Copy `AGENTS.md` + `SKILL.md` + `prompts/` to `~/.agents/skills/swarm-review/` |
+| **Agentic skill** | pi coding agent | Copy `AGENTS.md` to `~/.pi/agent/skills/swarm-review.md` |
+| **Agentic skill** | Claude Code | Copy `AGENTS.md` to your repo root |
+| **Agentic skill** | opencode | Copy `AGENTS.md` to your repo root |
+
+### Skill install (one command)
+
+```bash
+# Clone just the skill into the global skills directory (all harnesses)
+git clone --depth=1 https://github.com/Kahdeg-15520487/swarm-review ~/.agents/skills/swarm-review
+
+# Or for pi (single-file, no directory needed)
+curl -o ~/.pi/agent/skills/swarm-review.md \
+  https://raw.githubusercontent.com/Kahdeg-15520487/swarm-review/master/AGENTS.md
+```
+
+## Two Components
+
+| Component | What it is | Reviewers | Prompt source |
+|-----------|-----------|-----------|--------------|
+| **npm package** | Standalone CLI + TypeScript library | 3 (security, performance, quality) | `src/prompts/*.ts` — tool-calling format (`report_finding` tool) |
+| **`AGENTS.md` skill** | Single-file skill for agentic coding assistants | 7 (all of the above + documentation, codex, AGENTS.md, release) | `AGENTS.md` — plain markdown output format |
+
+Both implement the same reviewing philosophy. They differ in output mechanism: the CLI uses a structured tool-calling API (`report_finding`) fed by the pi-agent-core framework; the agentic skill writes plain markdown findings that the coordinator reads as text. The prompts are **not shared** — changes to reviewer logic need to be applied to both.
 
 ## How It Works
 
@@ -15,22 +45,21 @@ Dispatches security, performance, and code quality reviewers in parallel, then a
    - **Security** — injection, auth bypass, secrets
    - **Performance** — N+1 queries, memory leaks, algorithmic issues
    - **Code Quality** — logic errors, dead code, error handling
+   - **Documentation** — missing/outdated docs, incorrect API docs *(skill only)*
+   - **Engineering Codex** — internal compliance and standards *(skill only)*
+   - **AGENTS.md** — checks AI context file currency *(skill only)*
+   - **Release** — changelogs, version bumps, breaking changes *(skill only)*
 5. Coordinator deduplicates, re-categorizes, judges severity
 6. Output structured review in text, JSON, or markdown
 
-## Install
+## npm CLI Usage
 
 ```bash
-npm install swarm-review
-```
-
-Or use directly:
-
-```bash
+# Install globally
+npm install -g swarm-review
+# or use directly
 npx swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek
 ```
-
-## CLI Usage
 
 ```bash
 # Set your API key
@@ -119,6 +148,71 @@ jobs:
 
 Exit codes: `0` = approved, `1` = minor issues, `2` = significant concerns.
 
+## Agentic Skill
+
+The skill runs the swarm entirely inside your agentic coding assistant — no npm install required. Everything is in a **single file: [`AGENTS.md`](./AGENTS.md)**.
+
+`AGENTS.md` contains:
+- Harness-agnostic orchestration phases (detect target → risk tier → filter → parallel sub-reviewers → coordinator → report)
+- Per-harness subsections for Copilot CLI, pi coding agent, Claude Code, and opencode
+- All 7 reviewer prompts embedded inline (Security, Performance, Code Quality, Documentation, Engineering Codex, AGENTS.md, Release)
+- The Coordinator prompt with verdict rubric and output format
+
+### Usage by harness
+
+#### Copilot CLI
+
+```bash
+# Install
+cp -r . ~/.agents/skills/swarm-review
+
+# Invoke (in any session)
+# "swarm review" or "review this PR"
+```
+
+Copilot CLI uses `subagent()` for parallel task spawning. The full orchestration wiring is in `SKILL.md`; reviewer prompts are in `prompts/`.
+
+#### pi coding agent
+
+```bash
+# Single-file install (recommended)
+cp AGENTS.md ~/.pi/agent/skills/swarm-review.md
+
+# Or directory install (uses separate prompt files)
+cp -r . ~/.pi/agent/skills/swarm-review
+
+# Invoke
+pi                  # then: "swarm review"
+# or
+pi /skill:swarm-review
+```
+
+pi supports both single `.md` file skills (`~/.pi/agent/skills/`) and directory skills. The single-file install uses inline prompts from `AGENTS.md`; the directory install references `prompts/*.md` files.
+
+#### Claude Code
+
+```bash
+# Add to your project (Claude Code reads AGENTS.md automatically)
+cp AGENTS.md /path/to/your/project/AGENTS.md
+# or append to existing AGENTS.md
+cat AGENTS.md >> /path/to/your/project/AGENTS.md
+```
+
+Then in Claude Code: *"run a swarm review"*
+
+Claude Code's `Task` tool spawns sub-agents for parallel reviewer execution. Each sub-agent is directed to follow the relevant **Reviewer Prompt** section of `AGENTS.md`.
+
+#### opencode
+
+```bash
+# Add to your project
+cp AGENTS.md /path/to/your/project/AGENTS.md
+```
+
+Then: *"swarm review"*
+
+opencode reads `AGENTS.md` as a context/rules file. The orchestration agent follows the phase sequence and uses the embedded reviewer prompts for sub-tasks.
+
 ## Configuration
 
 | Option | CLI Flag | Default | Description |
@@ -140,11 +234,13 @@ Exit codes: `0` = approved, `1` = minor issues, `2` = significant concerns.
 
 The tool automatically assesses the diff and selects reviewers:
 
-| Tier | Lines | Reviewers |
-|------|-------|-----------|
-| **trivial** | ≤10 lines | quality only |
-| **lite** | ≤100 lines | quality + security |
-| **full** | >100 lines or security-sensitive files | all three |
+| Tier | Lines | Files | Reviewers (npm package) | Reviewers (skill) |
+|------|-------|-------|------------------------|-------------------|
+| **trivial** | ≤10 | ≤20 | quality only | coordinator + code-quality |
+| **lite** | ≤100 | ≤20 | quality + security | + documentation + AGENTS.md |
+| **full** | >100 or security-sensitive | any | all three | all 7 specialists |
+
+> Security-sensitive files (`auth/`, `crypto/`, `jwt/`, `oauth/`, etc.) always trigger a **full** review regardless of diff size.
 
 Override with `--risk-tier` or `--reviewers`.
 
