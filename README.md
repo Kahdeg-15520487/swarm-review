@@ -6,35 +6,59 @@ Dispatches specialized reviewers in parallel, then a coordinator deduplicates fi
 
 **[See it in action →](https://github.com/Kahdeg-15520487/swarm-review/pull/1)** — a PR with intentionally buggy code, reviewed automatically by Swarm Review.
 
-## Quick Install
+## Installation
 
-| How | Harness | Steps |
-|-----|---------|-------|
-| **npm CLI** | Any (CI/CD, scripts) | `npm install -g swarm-review` |
-| **Agentic skill** | Copilot CLI | Copy `AGENTS.md` + `SKILL.md` + `prompts/` to `~/.agents/skills/swarm-review/` |
-| **Agentic skill** | pi coding agent | Copy `AGENTS.md` to `~/.pi/agent/skills/swarm-review.md` |
-| **Agentic skill** | Claude Code | Copy `AGENTS.md` to your repo root |
-| **Agentic skill** | opencode | Copy `AGENTS.md` to your repo root |
+There are two ways to use Swarm Review: as a **standalone CLI** (npm package) or as an **agentic skill** loaded into your AI coding assistant.
 
-### Skill install (one command)
+### npm CLI
 
 ```bash
-# Clone just the skill into the global skills directory (all harnesses)
-git clone --depth=1 https://github.com/Kahdeg-15520487/swarm-review ~/.agents/skills/swarm-review
+npm install -g swarm-review
+```
 
-# Or for pi (single-file, no directory needed)
-curl -o ~/.pi/agent/skills/swarm-review.md \
-  https://raw.githubusercontent.com/Kahdeg-15520487/swarm-review/master/AGENTS.md
+Then run it against any git ref:
+
+```bash
+swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek
+```
+
+### Agentic Skill
+
+The skill is a **single file: [`SKILL.md`](./SKILL.md)**. Copy it to the right location for your harness:
+
+| Harness | Where to put `SKILL.md` | How to invoke |
+|---------|------------------------|---------------|
+| **pi coding agent** | `~/.pi/agent/skills/swarm-review/SKILL.md` | *"swarm review"* or `/skill:swarm-review` |
+| **Claude Code** | Rename to `AGENTS.md` in your repo root | *"run a swarm review"* |
+| **opencode** | Rename to `AGENTS.md` in your repo root | *"swarm review"* |
+| **Copilot CLI** | `~/.agents/skills/swarm-review/SKILL.md` | *"swarm review"* |
+
+#### One-liner installs
+
+```bash
+# pi coding agent
+mkdir -p ~/.pi/agent/skills/swarm-review
+curl -o ~/.pi/agent/skills/swarm-review/SKILL.md \
+  https://raw.githubusercontent.com/Kahdeg-15520487/swarm-review/master/SKILL.md
+
+# Claude Code / opencode (add to your project)
+curl -o AGENTS.md \
+  https://raw.githubusercontent.com/Kahdeg-15520487/swarm-review/master/SKILL.md
+
+# Copilot CLI
+mkdir -p ~/.agents/skills/swarm-review
+curl -o ~/.agents/skills/swarm-review/SKILL.md \
+  https://raw.githubusercontent.com/Kahdeg-15520487/swarm-review/master/SKILL.md
 ```
 
 ## Two Components
 
 | Component | What it is | Reviewers | Prompt source |
 |-----------|-----------|-----------|--------------|
-| **npm package** | Standalone CLI + TypeScript library | 3 (security, performance, quality) | `src/prompts/*.ts` — tool-calling format (`report_finding` tool) |
-| **`AGENTS.md` skill** | Single-file skill for agentic coding assistants | 7 (all of the above + documentation, codex, AGENTS.md, release) | `AGENTS.md` — plain markdown output format |
+| **npm package** | Standalone CLI + TypeScript library | 3 (security, performance, quality) | `src/` — tool-calling format (`report_finding` tool) |
+| **`SKILL.md` skill** | Single-file skill for agentic coding assistants | 7 (all of the above + documentation, codex, AGENTS.md, release) | `SKILL.md` — all reviewer prompts embedded inline |
 
-Both implement the same reviewing philosophy. They differ in output mechanism: the CLI uses a structured tool-calling API (`report_finding`) fed by the pi-agent-core framework; the agentic skill writes plain markdown findings that the coordinator reads as text. The prompts are **not shared** — changes to reviewer logic need to be applied to both.
+Both implement the same reviewing philosophy. They differ in output mechanism: the CLI uses a structured tool-calling API (`report_finding`) fed by the pi-agent-core framework; the agentic skill writes plain markdown findings that the coordinator reads as text. The reviewer prompts are **not shared** between the two — changes to reviewer logic need to be applied to both.
 
 ## How It Works
 
@@ -150,9 +174,9 @@ Exit codes: `0` = approved, `1` = minor issues, `2` = significant concerns.
 
 ## Agentic Skill
 
-The skill runs the swarm entirely inside your agentic coding assistant — no npm install required. Everything is in a **single file: [`AGENTS.md`](./AGENTS.md)**.
+The skill runs the swarm entirely inside your agentic coding assistant — no npm install required. Everything is in a **single file: [`SKILL.md`](./SKILL.md)**.
 
-`AGENTS.md` contains:
+`SKILL.md` contains:
 - Harness-agnostic orchestration phases (detect target → risk tier → filter → parallel sub-reviewers → coordinator → report)
 - Per-harness subsections for Copilot CLI, pi coding agent, Claude Code, and opencode
 - All 7 reviewer prompts embedded inline (Security, Performance, Code Quality, Documentation, Engineering Codex, AGENTS.md, Release)
@@ -160,58 +184,45 @@ The skill runs the swarm entirely inside your agentic coding assistant — no np
 
 ### Usage by harness
 
-#### Copilot CLI
-
-```bash
-# Install
-cp -r . ~/.agents/skills/swarm-review
-
-# Invoke (in any session)
-# "swarm review" or "review this PR"
-```
-
-Copilot CLI uses `subagent()` for parallel task spawning. The full orchestration wiring is in `SKILL.md`; reviewer prompts are in `prompts/`.
-
 #### pi coding agent
 
 ```bash
-# Single-file install (recommended)
-cp AGENTS.md ~/.pi/agent/skills/swarm-review.md
-
-# Or directory install (uses separate prompt files)
-cp -r . ~/.pi/agent/skills/swarm-review
-
-# Invoke
-pi                  # then: "swarm review"
-# or
-pi /skill:swarm-review
+mkdir -p ~/.pi/agent/skills/swarm-review
+cp SKILL.md ~/.pi/agent/skills/swarm-review/SKILL.md
 ```
 
-pi supports both single `.md` file skills (`~/.pi/agent/skills/`) and directory skills. The single-file install uses inline prompts from `AGENTS.md`; the directory install references `prompts/*.md` files.
+Then: *"swarm review"* or `/skill:swarm-review`
 
 #### Claude Code
 
 ```bash
-# Add to your project (Claude Code reads AGENTS.md automatically)
-cp AGENTS.md /path/to/your/project/AGENTS.md
-# or append to existing AGENTS.md
-cat AGENTS.md >> /path/to/your/project/AGENTS.md
+# Copy to your project root (Claude Code reads AGENTS.md automatically)
+cp SKILL.md /path/to/your/project/AGENTS.md
+
+# Or append to an existing AGENTS.md
+cat SKILL.md >> /path/to/your/project/AGENTS.md
 ```
 
-Then in Claude Code: *"run a swarm review"*
+Then: *"run a swarm review"*
 
-Claude Code's `Task` tool spawns sub-agents for parallel reviewer execution. Each sub-agent is directed to follow the relevant **Reviewer Prompt** section of `AGENTS.md`.
+Claude Code's `Task` tool spawns sub-agents for parallel reviewer execution. Each sub-agent is directed to follow the relevant **Reviewer Prompt** section of the file.
 
 #### opencode
 
 ```bash
-# Add to your project
-cp AGENTS.md /path/to/your/project/AGENTS.md
+cp SKILL.md /path/to/your/project/AGENTS.md
 ```
 
 Then: *"swarm review"*
 
-opencode reads `AGENTS.md` as a context/rules file. The orchestration agent follows the phase sequence and uses the embedded reviewer prompts for sub-tasks.
+#### Copilot CLI
+
+```bash
+mkdir -p ~/.agents/skills/swarm-review
+cp SKILL.md ~/.agents/skills/swarm-review/SKILL.md
+```
+
+Then: *"swarm review"* or *"review this PR"*
 
 ## Configuration
 
