@@ -29,11 +29,17 @@ A coordinated swarm of specialized AI code reviewers. Spawns domain-specific sub
 | **Claude Code** | Copy this file to `AGENTS.md` in your repo root | *"run a swarm review"* |
 | **opencode** | Copy this file to `AGENTS.md` in your repo root | *"swarm review"* |
 
-> For Copilot CLI and pi (directory-style install), the reviewer prompts are in `prompts/`. For all other harnesses, the prompts are embedded in the **Reviewer Prompts** section below.
+> All reviewer prompts are embedded inline in the **Reviewer Prompts** section below.
 
 ---
 
 ## Orchestration
+
+> **YOU ARE THE ORCHESTRATOR — NOT THE REVIEWER.**
+> Your job is to set up context, spawn sub-agents, collect their output, and present the verdict.
+> You MUST NOT read source files, analyse code, or produce findings yourself.
+> Every finding MUST come from a sub-agent spawned via the `subagent` tool.
+> Skipping sub-agent spawning and doing the review inline defeats the entire purpose of this skill.
 
 ### Phase 0 — Detect & Confirm Review Target
 
@@ -92,14 +98,17 @@ Strip the following from the diff before reviewers see it:
 
 ### Phase 3 — Spawn Sub-Reviewers (Parallel)
 
-All sub-reviewers run **concurrently**. Each receives:
+**Call `subagent({ tasks: [...] })` now.** Do not read source files yourself. Do not produce findings inline.
+Every reviewer runs as a separate sub-agent with `agent: 'worker'`. All tasks in the array run concurrently.
+
+Each task receives:
 1. The filtered diff (`.swarm-review/diff.patch`)
-2. Shared context (`.swarm-review/shared-context.txt`): repo name, branch, MR title/description if available, any custom instructions from the user
-3. Their role prompt (see **Reviewer Prompts** below)
+2. Shared context (`.swarm-review/shared-context.txt`)
+3. This skill file (`SKILL.md`) in its `reads` array — the sub-agent follows its named reviewer section
 
 Each sub-reviewer writes plain-text findings to `.swarm-review/reports/<name>-findings.md`.
 
-**Sub-reviewer roster by tier:**
+**Roster by tier — spawn exactly these tasks:**
 
 | Reviewer | trivial | lite | full |
 |----------|---------|------|------|
@@ -111,11 +120,106 @@ Each sub-reviewer writes plain-text findings to `.swarm-review/reports/<name>-fi
 | codex | | | ✓ |
 | release | | | ✓ (only when release files touched) |
 
+**Example `subagent` call (full tier):**
+
+```js
+await subagent({
+  tasks: [
+    {
+      agent: 'worker',
+      task: `You are the Security Reviewer. Follow the "Security Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/security-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/security-findings.md',
+      cwd: repoRoot,
+    },
+    {
+      agent: 'worker',
+      task: `You are the Performance Reviewer. Follow the "Performance Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/performance-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/performance-findings.md',
+      cwd: repoRoot,
+    },
+    {
+      agent: 'worker',
+      task: `You are the Code Quality Reviewer. Follow the "Code Quality Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/code-quality-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/code-quality-findings.md',
+      cwd: repoRoot,
+    },
+    {
+      agent: 'worker',
+      task: `You are the Documentation Reviewer. Follow the "Documentation Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/documentation-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/documentation-findings.md',
+      cwd: repoRoot,
+    },
+    {
+      agent: 'worker',
+      task: `You are the Engineering Codex Reviewer. Follow the "Engineering Codex Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/codex-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/codex-findings.md',
+      cwd: repoRoot,
+    },
+    {
+      agent: 'worker',
+      task: `You are the AGENTS.md Reviewer. Follow the "AGENTS.md Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/agents-md-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/agents-md-findings.md',
+      cwd: repoRoot,
+    },
+    {
+      agent: 'worker',
+      task: `You are the Release Reviewer. Follow the "Release Reviewer" section in SKILL.md.
+             Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+             Write findings to .swarm-review/reports/release-findings.md`,
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      output: '.swarm-review/reports/release-findings.md',
+      cwd: repoRoot,
+    },
+  ]
+});
+```
+
+Adjust the task list to match the assessed tier. Do not include reviewers outside the tier roster.
+
 ---
 
 ### Phase 4 — Coordinator Judge Pass
 
-After all sub-reviewers finish, concatenate their findings into `.swarm-review/reports/all-findings.md` and spawn the coordinator (see **Coordinator Prompt** below). The coordinator:
+After all sub-reviewer tasks complete, concatenate their output files into `.swarm-review/reports/all-findings.md`, then **call `subagent()` again** to spawn the coordinator as a separate worker. Do not consolidate findings yourself.
+
+```js
+const allFindings = [/* read each .swarm-review/reports/*-findings.md */].join('\n\n---\n\n');
+fs.writeFileSync('.swarm-review/reports/all-findings.md', allFindings);
+
+await subagent({
+  chain: [{
+    agent: 'worker',
+    task: `You are the Coordinator. Follow the "Coordinator" section in SKILL.md.
+           Findings: .swarm-review/reports/all-findings.md
+           Diff: .swarm-review/diff.patch  Context: .swarm-review/shared-context.txt
+           Write the final review to review-result.md`,
+    reads: ['SKILL.md', '.swarm-review/reports/all-findings.md',
+            '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+    output: 'review-result.md',
+    cwd: repoRoot,
+  }]
+});
+```
+
+The coordinator:
 
 1. Deduplicates overlapping findings
 2. Re-categorizes misfiled findings  
@@ -188,9 +292,9 @@ const results = await subagent({
     {
       agent: 'worker',
       task: `Review the diff at .swarm-review/diff.patch. 
-             Follow the "Security Reviewer" section from AGENTS.md. 
+             Follow the "Security Reviewer" section from SKILL.md. 
              Write findings to .swarm-review/reports/security-findings.md`,
-      reads: ['AGENTS.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
+      reads: ['SKILL.md', '.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
       output: '.swarm-review/reports/security-findings.md'
     },
     // ... other reviewers
