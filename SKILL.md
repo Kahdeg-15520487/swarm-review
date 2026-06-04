@@ -60,7 +60,10 @@ Select the review target using this priority table:
 | On feature branch, clean | All commits since `main`/`master` | `git diff $(git merge-base HEAD main) HEAD > .swarm-review/diff.patch` |
 | On `main`/`master`, clean | Last commit | `git diff HEAD~1 HEAD > .swarm-review/diff.patch` |
 
-**Ask the user to confirm** the detected target and invite custom instructions (e.g., *"only security and performance"*, *"focus on auth/"*, *"this is a hotfix"*). Custom instructions should be appended to every reviewer prompt.
+**Before confirming, parse the user's invocation phrase for reviewer constraints.**
+If the user mentioned specific domains — e.g. *"code quality and security"*, *"just performance"*, *"security only"* — record those as the active reviewer list. They override the tier roster entirely; spawn only those reviewers.
+
+**Ask the user to confirm** the detected target. Show which reviewers will run (either from the invocation or from the tier). Invite additional custom instructions (focus area, skip list, hotfix flag). Custom instructions are appended to every reviewer prompt.
 
 ---
 
@@ -100,6 +103,10 @@ Strip the following from the diff before reviewers see it:
 
 **Call `subagent({ tasks: [...] })` now.** Do not read source files yourself. Do not produce findings inline.
 Every reviewer runs as a separate sub-agent with `agent: 'worker'`. All tasks in the array run concurrently.
+
+**Reviewer selection — in priority order:**
+1. If the user named specific domains in their invocation or during Phase 0 confirmation, spawn ONLY those reviewers — ignore the tier roster entirely.
+2. Otherwise, use the tier roster below.
 
 Each task receives:
 1. The filtered diff (`.swarm-review/diff.patch`)
