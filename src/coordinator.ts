@@ -1,4 +1,5 @@
-import { COORDINATOR_PROMPT } from "./prompts/coordinator.js";
+import { buildCoordinatorSystemPrompt } from "./prompts/loader.js";
+import { COORDINATOR_AFFIX } from "./prompts/shared.js";
 import { createReviewerSession, runSession } from "./session.js";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { ReviewerResult, ReviewResult, ResolvedConfig, DiffResult, RiskTier, Verdict } from "./types.js";
@@ -82,7 +83,7 @@ export async function runCoordinator(
     { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0 },
   );
 
-  const systemPrompt = COORDINATOR_PROMPT;
+  const systemPrompt = buildCoordinatorSystemPrompt(COORDINATOR_AFFIX);
   const prompt = buildCoordinatorPrompt(reviewerResults, diffResult, config);
   const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
 

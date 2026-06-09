@@ -59,9 +59,17 @@ export async function review(config: ReviewConfig = {}): Promise<ReviewResult> {
 
   let reviewers: ReviewCategory[] = resolved.reviewers;
   if (!config.reviewers) {
-    if (riskTier === "trivial") reviewers = ["quality"];
-    else if (riskTier === "lite") reviewers = ["quality", "security"];
-    else reviewers = ["security", "performance", "quality"];
+    const hasRelease = filteredDiff.files.some((f) =>
+      /changelog|CHANGELOG|package\.json|Cargo\.toml|pyproject\.toml|\.version/i.test(f.path)
+    );
+    if (riskTier === "trivial") {
+      reviewers = ["quality"];
+    } else if (riskTier === "lite") {
+      reviewers = ["quality", "documentation", "agents-md"];
+    } else {
+      reviewers = ["security", "performance", "quality", "documentation", "codex", "agents-md"];
+      if (hasRelease) reviewers.push("release");
+    }
   }
 
   const finalConfig: ResolvedConfig = { ...resolved, riskTier, reviewers };

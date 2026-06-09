@@ -9,7 +9,14 @@ export type ReviewEventCallback = (source: string, event: AgentEvent) => void;
 
 export type Severity = "critical" | "warning" | "suggestion";
 
-export type ReviewCategory = "security" | "performance" | "quality";
+export type ReviewCategory =
+  | "security"
+  | "performance"
+  | "quality"
+  | "documentation"
+  | "codex"
+  | "agents-md"
+  | "release";
 
 export type RiskTier = "trivial" | "lite" | "full";
 

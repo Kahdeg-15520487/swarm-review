@@ -1,6 +1,5 @@
-import { SECURITY_PROMPT } from "./prompts/security.js";
-import { PERFORMANCE_PROMPT } from "./prompts/performance.js";
-import { QUALITY_PROMPT } from "./prompts/quality.js";
+import { buildReviewerSystemPrompt } from "./prompts/loader.js";
+import { REVIEWER_AFFIX } from "./prompts/shared.js";
 import { createReviewerSession, runSession } from "./session.js";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type {
@@ -39,14 +38,7 @@ ${diffContent}`;
 }
 
 export function getSystemPrompt(category: ReviewCategory): string {
-  switch (category) {
-    case "security":
-      return SECURITY_PROMPT;
-    case "performance":
-      return PERFORMANCE_PROMPT;
-    case "quality":
-      return QUALITY_PROMPT;
-  }
+  return buildReviewerSystemPrompt(category, REVIEWER_AFFIX);
 }
 
 async function mapWithConcurrency<TIn, TOut>(
