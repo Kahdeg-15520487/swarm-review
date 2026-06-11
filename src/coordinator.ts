@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { buildCoordinatorSystemPrompt } from "./prompts/loader.js";
 import { COORDINATOR_AFFIX } from "./prompts/shared.js";
 import { Agent } from "@earendil-works/pi-agent-core";
@@ -7,8 +6,6 @@ import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { DomainFindings, ReviewResult, Verdict, Finding } from "./types.js";
-
-const SKILL_DIR = resolve(import.meta.dirname, "..");
 
 /** Map Title Case domain names → internal keys */
 const DOMAIN_MAP: Record<string, string> = {

@@ -87,10 +87,14 @@ for (const entry of lines) {
 }
 
 const sourceLabels = {
-  security: "Security Reviewer",
-  performance: "Performance Reviewer",
-  quality: "Quality Reviewer",
-  coordinator: "Coordinator",
+  security:      "Security Reviewer",
+  performance:   "Performance Reviewer",
+  code_quality:  "Code Quality Reviewer",
+  documentation: "Documentation Reviewer",
+  compliance:    "Engineering Codex Reviewer",
+  agents_md:     "AGENTS.md Reviewer",
+  release:       "Release Reviewer",
+  coordinator:   "Coordinator",
 };
 
 // ── Helpers ──

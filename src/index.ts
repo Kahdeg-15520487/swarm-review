@@ -41,6 +41,8 @@ export async function review(config: ReviewConfig = {}): Promise<{ verdict: stri
     customInstructions: config.customInstructions,
     keepTemp: config.keepTemp,
     outputPath: config.outputFile,
+    provider: (config as any).provider,
+    model: (config as any).model,
   });
 
   const { readFileSync } = await import("node:fs");
