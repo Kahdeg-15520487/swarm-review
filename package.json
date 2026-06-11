@@ -1,6 +1,6 @@
 {
   "name": "swarm-review",
-  "version": "0.2.3",
+  "version": "1.0.0",
   "description": "Orchestrated AI code review using specialized agents",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,14 +11,10 @@
       "import": "./dist/index.js"
     }
   },
+  "files": ["dist", "SKILL.md"],
   "bin": {
     "swarm-review": "./dist/cli.js"
   },
-  "files": [
-    "prompts",
-    "config",
-    "dist"
-  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",

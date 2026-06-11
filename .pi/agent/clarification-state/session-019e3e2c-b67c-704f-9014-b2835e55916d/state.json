@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "state": {
+    "schemaVersion": 1,
+    "runId": "session-019e3e2c-b67c-704f-9014-b2835e55916d",
+    "status": "idle",
+    "topic": "",
+    "checklist": [
+      {
+        "id": "objective",
+        "label": "Objective",
+        "status": "open"
+      },
+      {
+        "id": "scope",
+        "label": "Scope",
+        "status": "open"
+      },
+      {
+        "id": "non_goals",
+        "label": "Non-goals",
+        "status": "open"
+      },
+      {
+        "id": "constraints",
+        "label": "Constraints",
+        "status": "open"
+      },
+      {
+        "id": "success_criteria",
+        "label": "Success criteria",
+        "status": "open"
+      },
+      {
+        "id": "evidence_required",
+        "label": "Evidence required",
+        "status": "open"
+      },
+      {
+        "id": "risks",
+        "label": "Risks",
+        "status": "open"
+      },
+      {
+        "id": "edge_cases",
+        "label": "Edge cases",
+        "status": "open"
+      },
+      {
+        "id": "technical_context",
+        "label": "Affected files / technical context",
+        "status": "open"
+      }
+    ],
+    "ambiguities": [],
+    "answers": [],
+    "explorationFindings": [],
+    "ledger": [],
+    "createdAt": "2026-06-09T09:37:42.374Z",
+    "updatedAt": "2026-06-09T09:37:42.374Z"
+  },
+  "snapshotSeq": 0,
+  "writtenAt": "2026-06-11T01:29:09.620Z"
+}

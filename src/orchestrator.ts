@@ -37,6 +37,12 @@ function renderMarkdown(result: ReviewResult): string {
   lines.push("## Findings");
   lines.push("");
 
+  const hasFindings = result.findings.some((d) => d.findings.length > 0);
+  if (!hasFindings) {
+    lines.push("No issues found. \u2728");
+    lines.push("");
+  }
+
   for (const domain of result.findings) {
     if (domain.findings.length === 0) continue;
 
@@ -56,10 +62,10 @@ function renderMarkdown(result: ReviewResult): string {
     }
   }
 
-  lines.push("## Domains reviewed");
+  const ranDomains = result.findings.map((d) => domainNameToTitle(d.domain));
+  lines.push("## Reviewers run");
   lines.push("");
-  const allDomains = ["Code Quality", "Security", "Performance", "Documentation", "Compliance / codex", "AGENTS.md", "Release"];
-  for (const d of allDomains) {
+  for (const d of ranDomains) {
     lines.push(`- ${d}`);
   }
 

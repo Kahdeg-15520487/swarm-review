@@ -1,12 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { buildCoordinatorSystemPrompt } from "./prompts/loader.js";
+import { COORDINATOR_AFFIX } from "./prompts/shared.js";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { DomainFindings, ReviewResult, Verdict, Finding } from "./types.js";
-
-const SKILL_DIR = resolve(import.meta.dirname, "..");
 
 /** Map Title Case domain names → internal keys */
 const DOMAIN_MAP: Record<string, string> = {
@@ -98,7 +97,7 @@ export async function runCoordinator(
   provider?: string,
   modelId?: string,
 ): Promise<ReviewResult> {
-  const prompt = readFileSync(resolve(SKILL_DIR, "prompts", "coordinator.md"), "utf-8");
+  const systemPrompt = buildCoordinatorSystemPrompt(COORDINATOR_AFFIX);
   let sharedContext = "";
   try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch {}
 
@@ -119,13 +118,7 @@ export async function runCoordinator(
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: [
-        `You are a code review coordinator. Your job is to consolidate findings from multiple specialized reviewers, deduplicate them, re-categorize as needed, filter false positives, and call \`submit_review\` with the final verdict and findings.`,
-        ``,
-        `Call \`submit_review\` EXACTLY ONCE when you are done. Include ALL findings from the sub-reviewers that are valid, removing only duplicates and false positives.`,
-        ``,
-        `Use the rubric: approved (clean), approved_with_comments (suggestions/warnings, no risk), minor_issues (risk patterns), significant_concerns (critical items).`,
-      ].join("\n"),
+      systemPrompt,
       model,
       thinkingLevel: "medium",
       tools: [tool],
@@ -135,9 +128,6 @@ export async function runCoordinator(
   });
 
   const instructions = [
-    `# Coordinator Instructions`,
-    prompt,
-    ``,
     `# Sub-Reviewer Findings (${allFindings.reduce((s, d) => s + d.findings.length, 0)} total)`,
     domainSummary,
     ``,

@@ -1,5 +1,12 @@
 node_modules
 dist/
+__pycache__/
+*.log
+.env
+.DS_Store
+.vscode/
+*.pptx
+*.py
 
 # Swarm Review temp files
 .swarm-review/

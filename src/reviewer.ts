@@ -1,12 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { Finding, DomainFindings } from "./types.js";
-
-const SKILL_DIR = resolve(import.meta.dirname, "..");
+import { buildReviewerSystemPrompt } from "./prompts/loader.js";
+import { REVIEWER_AFFIX } from "./prompts/shared.js";
 
 /** Tool: report_finding — sub-reviewers call this for each issue they find */
 function createReportFindingTool(domain: string) {
@@ -73,7 +72,8 @@ export async function runReviewer(
   provider?: string,
   modelId?: string,
 ): Promise<DomainFindings> {
-  const promptText = readFileSync(resolve(SKILL_DIR, promptFile), "utf-8");
+  const domain = extractDomain(promptFile);
+  const systemPrompt = buildReviewerSystemPrompt(domain as any, REVIEWER_AFFIX);
   const diffSnippet = readFileSync(diffPath, "utf-8").slice(0, 20_000);
   let sharedContext = "";
   try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch {}
@@ -83,20 +83,11 @@ export async function runReviewer(
   const model = getModel(p as any, m as any);
   if (!model) throw new Error(`Model not found: ${p}/${m}.`);
 
-  const domain = extractDomain(promptFile);
   const { tool, getFindings } = createReportFindingTool(domain);
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: [
-        `You are a ${domain} code reviewer. Review the provided diff and report findings using the \`report_finding\` tool.`,
-        ``,
-        `# Instructions`,
-        promptText,
-        ``,
-        `Call \`report_finding\` once per issue. Do NOT include findings in your text response — only use the tool.`,
-        `If no issues found, just say "No issues found." and do not call the tool.`,
-      ].join("\n"),
+      systemPrompt,
       model,
       thinkingLevel: "off",
       tools: [tool],
