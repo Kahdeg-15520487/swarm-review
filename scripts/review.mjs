@@ -12,11 +12,11 @@
  *   node scripts/review.mjs --diff staged --session-log trace.jsonl
  */
 
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 // Local import — resolves to the repo's built dist/
 // The CI workflow builds before running this script.
-import { review, formatOutput } from "../dist/index.js";
+import { review } from "../dist/index.js";
 
 // ── Progress formatting ──
 
@@ -198,14 +198,10 @@ async function main() {
   };
 
   try {
-    const result = await review(config);
+    const { verdict, resultPath } = await review(config);
+    const output = readFileSync(resultPath, "utf-8");
 
-    const findingsCount = result.findings.length;
-    progress(`✅ Review complete — verdict: ${result.verdict} (${findingsCount} findings, ${(result.durationMs / 1000).toFixed(1)}s)`);
-
-    const useColor = config.color ?? process.stdout.isTTY ?? false;
-    const format = config.format ?? "text";
-    const output = formatOutput(result, format, useColor);
+    progress(`✅ Review complete — verdict: ${verdict}`);
 
     if (config.outputFile) {
       writeFileSync(config.outputFile, output, "utf-8");
@@ -215,10 +211,10 @@ async function main() {
     }
 
     // Exit codes matching swarm-review CLI convention
-    if (result.verdict === "significant_concerns") {
+    if (verdict === "significant_concerns") {
       process.exit(2);
     }
-    if (result.verdict === "minor_issues") {
+    if (verdict === "minor_issues") {
       process.exit(1);
     }
     process.exit(0);
