@@ -8,15 +8,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import type { ReviewCategory } from "../types.js";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // SKILL.md sits at the package root; this file compiles to dist/prompts/loader.js
 const SKILL_MD_PATH = resolve(__dirname, "../../SKILL.md");
 
-const SECTION_NAMES: Record<ReviewCategory | "coordinator", string> = {
+const SECTION_NAMES: Record<string, string> = {
   security:      "Security Reviewer",
   performance:   "Performance Reviewer",
   quality:       "Code Quality Reviewer",
@@ -83,7 +81,7 @@ function stripOutputBlock(content: string): string {
  * Core content comes from SKILL.md; `affix` supplies the tool-calling rules.
  */
 export function buildReviewerSystemPrompt(
-  category: ReviewCategory,
+  category: string,
   affix: string,
 ): string {
   const name = SECTION_NAMES[category];

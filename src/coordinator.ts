@@ -1,158 +1,153 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { buildCoordinatorSystemPrompt } from "./prompts/loader.js";
 import { COORDINATOR_AFFIX } from "./prompts/shared.js";
-import { createReviewerSession, runSession } from "./session.js";
-import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import type { ReviewerResult, ReviewResult, ResolvedConfig, DiffResult, RiskTier, Verdict } from "./types.js";
+import { Agent } from "@earendil-works/pi-agent-core";
+import { getModel, streamSimpleOpenAICompletions } from "@earendil-works/pi-ai";
+import { Type } from "typebox";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import type { DomainFindings, ReviewResult, Verdict, Finding } from "./types.js";
 
-export function buildCoordinatorPrompt(
-  reviewerResults: ReviewerResult[],
-  diffResult: DiffResult,
-  config: ResolvedConfig,
-): string {
-  const findingsXml = reviewerResults
-    .map((r) => {
-      if (r.error) {
-        return `<reviewer name="${r.reviewer}" status="error">\n  <error>${r.error}</error>\n</reviewer>`;
+const SKILL_DIR = resolve(import.meta.dirname, "..");
+
+/** Map Title Case domain names → internal keys */
+const DOMAIN_MAP: Record<string, string> = {
+  "Code Quality": "code_quality",
+  Security: "security",
+  Performance: "performance",
+  Documentation: "documentation",
+  "Compliance / codex": "compliance",
+  "AGENTS.md": "agents_md",
+  Release: "release",
+};
+
+/** Tool: submit_review — coordinator calls this once to submit the final verdict */
+function createSubmitReviewTool() {
+  let result: ReviewResult | null = null;
+
+  const tool: AgentTool<typeof submitReviewSchema, { submitted: boolean }> = {
+    name: "submit_review",
+    label: "Submit Review",
+    description: "Submit the final consolidated review. Call this ONCE after analyzing all sub-reviewer findings.",
+    parameters: submitReviewSchema,
+    async execute(_id, params) {
+      // Map Title Case domains back to internal keys
+      const findings: DomainFindings[] = [];
+      const domainGroup = new Map<string, Finding[]>();
+      for (const f of params.findings ?? []) {
+        const key = DOMAIN_MAP[f.domain] ?? f.domain;
+        if (!domainGroup.has(key)) domainGroup.set(key, []);
+        domainGroup.get(key)!.push({
+          severity: f.severity as Finding["severity"],
+          file: f.file,
+          line: f.line ?? 0,
+          title: f.title,
+          description: f.description,
+          recommendation: f.recommendation,
+        });
       }
-      const findings = r.findings
-        .map(
-          (f) =>
-            `  <finding severity="${f.severity}" category="${f.category}">\n` +
-            `    <title>${f.title}</title>\n` +
-            `    <file>${f.file}${f.line ? `:${f.line}` : ""}</file>\n` +
-            `    <description>${f.description}</description>\n` +
-            `    <recommendation>${f.recommendation}</recommendation>\n` +
-            `  </finding>`,
-        )
-        .join("\n");
+      for (const [domain, findingsList] of domainGroup) {
+        findings.push({ domain, findings: findingsList });
+      }
 
-      return `<reviewer name="${r.reviewer}" status="completed" findings="${r.findings.length}">\n${findings || "  <no-findings/>\n"}\n</reviewer>`;
+      result = {
+        verdict: params.verdict as Verdict,
+        summary: params.summary,
+        findings,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: `Review submitted: ${params.verdict}` }],
+        details: { submitted: true },
+        terminate: true,
+      };
+    },
+  };
+
+  return { tool, getResult: () => result };
+}
+
+const findingSchema = Type.Object({
+  severity: Type.Union([
+    Type.Literal("critical"),
+    Type.Literal("warning"),
+    Type.Literal("suggestion"),
+  ], { description: "Severity of the finding" }),
+  domain: Type.String({ description: "Domain: one of: Code Quality, Security, Performance, Documentation, Compliance / codex, AGENTS.md, Release" }),
+  title: Type.String({ description: "Short title for the issue" }),
+  description: Type.String({ description: "Detailed description" }),
+  file: Type.String({ description: "File path" }),
+  line: Type.Optional(Type.Number({ description: "Line number" })),
+  recommendation: Type.String({ description: "How to fix" }),
+});
+
+const submitReviewSchema = Type.Object({
+  verdict: Type.Union([
+    Type.Literal("approved"),
+    Type.Literal("approved_with_comments"),
+    Type.Literal("minor_issues"),
+    Type.Literal("significant_concerns"),
+  ], { description: "Overall review verdict" }),
+  summary: Type.String({ description: "Brief 1-3 sentence summary of the review" }),
+  findings: Type.Array(findingSchema, { description: "Deduplicated, consolidated findings" }),
+});
+
+export async function runCoordinator(
+  allFindings: DomainFindings[],
+  sharedContextPath: string,
+  diffPath: string,
+  customInstructions?: string,
+  provider?: string,
+  modelId?: string,
+): Promise<ReviewResult> {
+  const systemPrompt = buildCoordinatorSystemPrompt(COORDINATOR_AFFIX);
+  let sharedContext = "";
+  try { sharedContext = readFileSync(sharedContextPath, "utf-8"); } catch {}
+
+  // Build a summary of sub-reviewer findings for the coordinator's context
+  const domainSummary = allFindings
+    .map((d) => {
+      const lines = d.findings.map((f) => `  [${f.severity}] ${f.file}:${f.line} \u2014 ${f.title}\n    ${f.description}`);
+      return `### ${d.domain}\n${lines.join("\n")}`;
     })
     .join("\n\n");
 
-  const filesSummary = diffResult.files
-    .map((f) => `- ${f.path} (+${f.addedLines}/-${f.removedLines})`)
-    .join("\n");
+  const p = provider ?? "anthropic";
+  const m = modelId ?? "claude-opus-4-5";
+  const model = getModel(p as any, m as any);
+  if (!model) throw new Error(`Model not found: ${p}/${m}.`);
 
-  let prompt = `## Coordinate This Review
+  const { tool, getResult } = createSubmitReviewTool();
 
-### Changed Files
-${filesSummary}
-
-### Reviewer Findings
-
-${findingsXml}
-
-### Your Task
-
-1. Read through ALL findings from ALL reviewers above.
-2. Deduplicate: if the same issue is flagged by multiple reviewers, keep it ONCE in the best category.
-3. Filter: drop false positives, nitpicks, and vague suggestions. If unsure about a finding, read the source code to verify.
-4. Re-categorize: move misfiled findings to the correct category.
-5. Judge overall severity and produce a verdict using the submit_review tool.`;
-
-  if (config.customInstructions) {
-    prompt += `\n\n### Custom Instructions\n\n${config.customInstructions}`;
-  }
-
-  return prompt;
-}
-
-export interface CoordinatorResult extends ReviewResult {
-  coordinatorEvents?: AgentEvent[];
-}
-
-export async function runCoordinator(
-  reviewerResults: ReviewerResult[],
-  diffResult: DiffResult,
-  riskTier: RiskTier,
-  config: ResolvedConfig,
-  signal?: AbortSignal,
-  onEvent?: import("./types.js").ReviewEventCallback,
-): Promise<ReviewResult> {
-  const startTime = Date.now();
-
-  const totalUsage = reviewerResults.reduce(
-    (acc, r) => ({
-      inputTokens: acc.inputTokens + r.usage.inputTokens,
-      outputTokens: acc.outputTokens + r.usage.outputTokens,
-      cacheReadTokens: acc.cacheReadTokens + r.usage.cacheReadTokens,
-      cacheWriteTokens: acc.cacheWriteTokens + r.usage.cacheWriteTokens,
-      cost: acc.cost + r.usage.cost,
-    }),
-    { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0 },
-  );
-
-  const systemPrompt = buildCoordinatorSystemPrompt(COORDINATOR_AFFIX);
-  const prompt = buildCoordinatorPrompt(reviewerResults, diffResult, config);
-  const getApiKey = (provider: string) => process.env[`${provider.toUpperCase()}_API_KEY`] || undefined;
-
-  try {
-    const { agent, getReview, model } = await createReviewerSession({
+  const agent = new Agent({
+    initialState: {
       systemPrompt,
-      category: "coordinator",
-      model: config.model,
-      provider: config.provider,
-      getApiKey,
-      thinkingLevel: config.thinkingLevel,
-    });
+      model,
+      thinkingLevel: "medium",
+      tools: [tool],
+    },
+    streamFn: streamSimpleOpenAICompletions as any,
+    getApiKey: (prov: string) => process.env[`${prov.toUpperCase()}_API_KEY`] || undefined,
+  });
 
-    const coordinatorTimeout = config.reviewerTimeout * 2;
-    const { usage: coordinatorUsage, events: coordinatorEvents } = await runSession(
-      agent,
-      prompt,
-      coordinatorTimeout,
-      signal,
-      onEvent,
-      "coordinator",
-    );
+  const instructions = [
+    `# Sub-Reviewer Findings (${allFindings.reduce((s, d) => s + d.findings.length, 0)} total)`,
+    domainSummary,
+    ``,
+    `# Shared Context`,
+    sharedContext,
+    ``,
+    customInstructions ?? "",
+    ``,
+    `Call \`submit_review\` with the consolidated verdict and findings.`,
+  ].join("\n");
 
-    const review = getReview();
+  await agent.prompt(instructions);
+  await agent.waitForIdle();
 
-    totalUsage.inputTokens += coordinatorUsage.inputTokens;
-    totalUsage.outputTokens += coordinatorUsage.outputTokens;
-    totalUsage.cacheReadTokens += coordinatorUsage.cacheReadTokens;
-    totalUsage.cacheWriteTokens += coordinatorUsage.cacheWriteTokens;
-    totalUsage.cost += coordinatorUsage.cost;
-
-    const verdict: Verdict = review?.verdict ?? deriveVerdict(reviewerResults);
-
-    return {
-      verdict,
-      findings: review?.findings ?? aggregateFindings(reviewerResults),
-      summary: review?.summary ?? "Review completed with some automation issues.",
-      riskTier,
-      reviewers: reviewerResults,
-      totalUsage,
-      durationMs: Date.now() - startTime,
-      config,
-      coordinatorEvents,
-    };
-  } catch (err: any) {
-    return {
-      verdict: deriveVerdict(reviewerResults),
-      findings: aggregateFindings(reviewerResults),
-      summary: `Coordinator failed (${err.message}). Results are raw, un-deduplicated findings.`,
-      riskTier,
-      reviewers: reviewerResults,
-      totalUsage,
-      durationMs: Date.now() - startTime,
-      config,
-    };
-  }
-}
-
-function deriveVerdict(reviewers: ReviewerResult[]): Verdict {
-  const allFindings = reviewers.flatMap((r) => r.findings);
-  const hasCritical = allFindings.some((f) => f.severity === "critical");
-  const warningCount = allFindings.filter((f) => f.severity === "warning").length;
-
-  if (hasCritical) return "significant_concerns";
-  if (warningCount >= 3) return "minor_issues";
-  if (warningCount > 0) return "approved_with_comments";
-  return "approved";
-}
-
-function aggregateFindings(reviewers: ReviewerResult[]) {
-  return reviewers.flatMap((r) => r.findings);
+  return getResult() ?? {
+    verdict: "minor_issues",
+    summary: "Coordinator did not produce a result.",
+    findings: [],
+  };
 }

@@ -1,0 +1,53 @@
+{
+  "noiseFilePatterns": [
+    "bun.lock",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "Cargo.lock",
+    "go.sum",
+    "poetry.lock",
+    "Pipfile.lock",
+    "flake.lock",
+    "composer.lock",
+    "Gemfile.lock",
+    "mix.lock"
+  ],
+  "noiseExtensions": [
+    ".min.js",
+    ".min.css",
+    ".bundle.js",
+    ".map",
+    ".chunk.js"
+  ],
+  "generatedFileMarkers": [
+    "// @generated",
+    "/* @generated */",
+    "// @ts-generate",
+    "auto-generated",
+    "do not edit",
+    "DO NOT EDIT",
+    "This file is generated",
+    "this file was generated",
+    "/* eslint-disable */ -- generated",
+    "@generated"
+  ],
+  "generatedFileExceptions": [
+    "migration",
+    "migrations",
+    "database/migrations"
+  ],
+  "noiseDirectoryPatterns": [
+    "node_modules/",
+    ".git/",
+    "dist/",
+    "build/",
+    ".next/",
+    ".nuxt/",
+    "target/",
+    "vendor/",
+    "__pycache__/",
+    ".terraform/",
+    ".serverless/"
+  ]
+}

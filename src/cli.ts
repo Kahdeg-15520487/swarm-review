@@ -1,181 +1,83 @@
 #!/usr/bin/env node
 
-/**
- * swarm-review — CLI entry point
- *
- * Usage:
- *   swarm-review --diff HEAD~1 --cwd . --format text
- *   swarm-review --diff main...HEAD --format json --output results.json
- *   swarm-review --diff staged --reviewers security,quality
- */
+import { readFileSync } from "node:fs";
+import { parseArgs } from "node:util";
+import { runSwarmReview } from "./orchestrator.js";
 
-import { writeFileSync } from "node:fs";
-import { review, formatOutput } from "./index.js";
-import type { ReviewConfig, ReviewCategory, RiskTier, OutputFormat } from "./types.js";
+async function main() {
+  const { values } = parseArgs({
+    options: {
+      help: { type: "boolean", short: "h", default: false },
+      "custom-instructions": { type: "string", short: "c" },
+      "keep-temp": { type: "boolean", short: "k", default: false },
+      output: { type: "string", short: "o" },
+      tier: { type: "string", short: "t" },
+      diff: { type: "string", short: "d" },
+      "cwd": { type: "string", short: "C" },
+      "model": { type: "string", short: "m" },
+      "provider": { type: "string", short: "p" },
+      ci: { type: "boolean", default: false },
+    },
+    allowPositionals: false,
+  });
 
-function parseCliArgs(): ReviewConfig & { help?: boolean } {
-  const args = process.argv.slice(2);
-  const config: ReviewConfig & { help?: boolean } = {};
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const next = () => {
-      const val = args[++i];
-      if (!val) {
-        console.error(`Missing value for ${arg}`);
-        process.exit(1);
-      }
-      return val;
-    };
-
-    switch (arg) {
-      case "--help":
-      case "-h":
-        config.help = true;
-        break;
-      case "--diff":
-      case "-d":
-        config.diff = next();
-        break;
-      case "--cwd":
-      case "-c":
-        config.cwd = next();
-        break;
-      case "--model":
-      case "-m":
-        config.model = next();
-        break;
-      case "--provider":
-        config.provider = next();
-        break;
-      case "--reviewers":
-      case "-r":
-        config.reviewers = next().split(",").map((s) => s.trim() as ReviewCategory);
-        break;
-      case "--risk-tier":
-        config.riskTier = next() as RiskTier;
-        break;
-      case "--format":
-      case "-f":
-        config.format = next() as OutputFormat;
-        break;
-      case "--output":
-      case "-o":
-        config.outputFile = next();
-        break;
-      case "--session-log":
-        config.sessionLog = next();
-        break;
-      case "--timeout":
-        config.reviewerTimeout = parseInt(next(), 10);
-        break;
-      case "--concurrency":
-        config.maxConcurrency = parseInt(next(), 10);
-        break;
-      case "--instructions":
-        config.customInstructions = next();
-        break;
-      case "--thinking-level":
-        config.thinkingLevel = next() as ReviewConfig["thinkingLevel"];
-        break;
-      case "--no-color":
-        config.color = false;
-        break;
-      default:
-        if (arg.startsWith("-")) {
-          console.error(`Unknown option: ${arg}`);
-          process.exit(1);
-        }
-    if (!config.diff) config.diff = arg;
-        break;
-    }
-  }
-
-  return config;
-}
-
-function printHelp(): void {
-  console.log(`
-swarm-review — 
+  if (values.help) {
+    console.log(`
+swarm-review — AI code review swarm
 
 USAGE:
-  swarm-review [OPTIONS] [DIFF_SPEC]
-
-ARGUMENTS:
-  DIFF_SPEC              Git diff specification (default: HEAD~1)
+  swarm-review                            Auto-detect context and review
+  swarm-review -C /path/to/repo           Review another directory
+  swarm-review -m deepseek-v4-flash -p deepseek   Custom model
+  swarm-review --ci                       CI mode (JSON output)
 
 OPTIONS:
-  -h, --help             Show this help message
-  -d, --diff <spec>      Diff source: git ref range, "staged", or "unstaged"
-  -c, --cwd <path>       Working directory (default: current directory)
-  -m, --model <id>       Model ID to use (default: auto-detect)
-  --provider <name>      Model provider (default: auto-detect)
-  -r, --reviewers <list> Comma-separated reviewers: security,performance,quality
-  --risk-tier <tier>     Override risk tier: trivial, lite, full
-  -f, --format <fmt>     Output format: text, json, markdown (default: text)
-  -o, --output <file>    Write output to file instead of stdout
-  --timeout <ms>         Per-reviewer timeout in ms (default: 300000)
-  --concurrency <n>      Max concurrent reviewers (default: 3)
-  --instructions <text>  Custom instructions for all reviewers
-  --thinking-level <lvl> LLM thinking level: off, low, medium, high (default: medium)
-  --session-log <file>   Write full session trace as JSONL
-  --no-color             Disable colored output
+  -h, --help                 Show this help
+  -C, --cwd <path>           Working directory (default: current dir)
+  -c, --custom-instructions  Custom instructions for all reviewers
+  -k, --keep-temp            Keep .swarm-review/ temp files
+  -o, --output <path>        Write final review to <path> (default: review-result.md)
+  -t, --tier <tier>          Override risk tier (trivial | lite | full)
+  -d, --diff <path>          Path to a diff file (skips auto-detection)
+  -m, --model <id>           Model ID (default: claude-sonnet-4)
+  -p, --provider <name>      Model provider (default: anthropic)
+  --ci                        CI mode — JSON output
 
 EXAMPLES:
-  # Review last commit
-  swarm-review HEAD~1
+  swarm-review                                # Current dir, auto-detect
+  swarm-review -C ~/projects/my-app           # Another repo
+  swarm-review -p deepseek -m deepseek-v4-flash  # Custom model
+  swarm-review --ci                           # JSON for pipelines
 
-  # Review staged changes
-  swarm-review --diff staged
-
-  # Review branch vs main, output as JSON
-  swarm-review --diff main...HEAD --format json
-
-  # Review with specific reviewers and custom instructions
-  swarm-review --diff HEAD~3 --reviewers security,quality --instructions "Focus on auth"
-
-  # Use as library in a script:
-  # import { review } from "swarm-review";
-  # const result = await review({ diff: "HEAD~1" });
+Set <PROVIDER>_API_KEY env var (e.g. ANTHROPIC_API_KEY, DEEPSEEK_API_KEY).
 `);
-}
-
-async function main(): Promise<void> {
-  const config = parseCliArgs();
-
-  if (config.help) {
-    printHelp();
     process.exit(0);
   }
 
-  console.error("Starting swarm review...");
-  console.error(`  Diff: ${config.diff ?? "HEAD~1"}`);
-  console.error(`  CWD:  ${config.cwd ?? process.cwd()}`);
+  const cwd = values.cwd ?? process.cwd();
 
   try {
-    const result = await review(config);
+    const { resultPath } = await runSwarmReview({
+      cwd,
+      customInstructions: values["custom-instructions"],
+      keepTemp: values["keep-temp"],
+      outputPath: values.output,
+      provider: values.provider,
+      model: values.model,
+      onProgress: values.ci ? undefined : (msg) => console.error(msg),
+    });
 
-    const useColor = config.color ?? process.stdout.isTTY ?? false;
-    const format = config.format ?? "text";
-    const output = formatOutput(result, format, useColor);
-
-    if (config.outputFile) {
-      writeFileSync(config.outputFile, output, "utf-8");
-      console.error(`Review written to ${config.outputFile}`);
+    if (values.ci) {
+      const content = readFileSync(resultPath, "utf-8");
+      const result = { status: "completed", resultPath, summary: content.slice(0, 500) };
+      console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(output);
+      console.log(`\n✅ Review complete → ${resultPath}`);
     }
 
-    if (result.verdict === "significant_concerns") {
-      process.exit(2);
-    }
-    if (result.verdict === "minor_issues") {
-      process.exit(1);
-    }
     process.exit(0);
-  } catch (err: any) {
-    console.error("Review failed:", err.message);
-    console.error(err.stack);
+  } catch (err) {
+    console.error(`\n❌ Review failed: ${err}`);
     process.exit(1);
   }
 }
