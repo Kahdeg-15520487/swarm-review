@@ -15,12 +15,13 @@ const __dirname = dirname(__filename);
 const SKILL_MD_PATH = resolve(__dirname, "../../SKILL.md");
 
 const SECTION_NAMES: Record<string, string> = {
+  // Keys match the domain strings produced by reviewer.ts extractDomain()
   security:      "Security Reviewer",
   performance:   "Performance Reviewer",
-  quality:       "Code Quality Reviewer",
+  code_quality:  "Code Quality Reviewer",
   documentation: "Documentation Reviewer",
-  codex:         "Engineering Codex Reviewer",
-  "agents-md":   "AGENTS.md Reviewer",
+  compliance:    "Engineering Codex Reviewer",
+  agents_md:     "AGENTS.md Reviewer",
   release:       "Release Reviewer",
   coordinator:   "Coordinator",
 };
