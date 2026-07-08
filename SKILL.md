@@ -23,7 +23,7 @@ A coordinated swarm of specialized AI code reviewers. Spawns domain-specific sub
 
 | Harness | Install | Invoke |
 |---------|---------|--------|
-| **npm CLI** | `npm install -g swarm-review` | `swarm-review HEAD~1 --model deepseek-v4-flash --provider deepseek` |
+| **npm CLI** | `npm install -g swarm-review` | `swarm-review HEAD~1 --model claude-sonnet-4.6 --provider github-copilot` |
 | **Copilot CLI** | Copy skill dir to `~/.agents/skills/swarm-review/` | *"swarm review"* or *"review this PR"* |
 | **pi coding agent** | Copy this file to `~/.pi/agent/skills/swarm-review.md` | `/skill:swarm-review` or *"swarm review"* |
 | **Claude Code** | Copy this file to `AGENTS.md` in your repo root | *"run a swarm review"* |
