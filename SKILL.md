@@ -17,18 +17,6 @@ triggers:
 
 A coordinated swarm of specialized AI code reviewers. Spawns domain-specific sub-reviewers in parallel, then a coordinator deduplicates, re-categorizes, and judges the final verdict.
 
----
-
-## Quick Install by Harness
-
-| Harness | Install | Invoke |
-|---------|---------|--------|
-| **npm CLI** | `npm install -g swarm-review` | `swarm-review HEAD~1 --model claude-sonnet-4.6 --provider github-copilot` |
-| **Copilot CLI** | Copy skill dir to `~/.agents/skills/swarm-review/` | *"swarm review"* or *"review this PR"* |
-| **pi coding agent** | Copy this file to `~/.pi/agent/skills/swarm-review.md` | `/skill:swarm-review` or *"swarm review"* |
-| **Claude Code** | Copy this file to `AGENTS.md` in your repo root | *"run a swarm review"* |
-| **opencode** | Copy this file to `AGENTS.md` in your repo root | *"swarm review"* |
-
 > All reviewer prompts are embedded inline in the **Reviewer Prompts** section below.
 
 ---
@@ -36,10 +24,10 @@ A coordinated swarm of specialized AI code reviewers. Spawns domain-specific sub
 ## Orchestration
 
 > **YOU ARE THE ORCHESTRATOR — NOT THE REVIEWER.**
-> Your job is to set up context, spawn sub-agents, collect their output, and present the verdict.
+> Your job is to set up context, spawn sub-reviewers, collect their output, and present the verdict.
 > You MUST NOT read source files, analyse code, or produce findings yourself.
-> Every finding MUST come from a sub-agent spawned via the `subagent` tool.
-> Skipping sub-agent spawning and doing the review inline defeats the entire purpose of this skill.
+> Every finding MUST come from a sub-reviewer spawned as a separate agent.
+> Skipping sub-reviewer spawning and doing the review inline defeats the entire purpose of this skill.
 
 ### Phase 0 — Detect & Confirm Review Target
 
@@ -101,20 +89,20 @@ Strip the following from the diff before reviewers see it:
 
 ### Phase 3 — Spawn Sub-Reviewers (Parallel)
 
-**Call `subagent({ tasks: [...] })` now.** Do not read source files yourself. Do not produce findings inline.
-Every reviewer runs as a separate sub-agent with `agent: 'worker'`. All tasks in the array run concurrently.
+Spawn each reviewer from the tier roster as a **separate sub-agent**, all running **concurrently**.
 
 **Reviewer selection — in priority order:**
 1. If the user named specific domains in their invocation or during Phase 0 confirmation, spawn ONLY those reviewers — ignore the tier roster entirely.
 2. Otherwise, use the tier roster below.
 
-Each task receives:
-1. The full reviewer prompt — **inlined directly into the `task` string by the orchestrator**. Do not reference SKILL.md in `reads`. Copy the relevant reviewer section from this file into the task string.
-2. The diff and shared context as `reads` — workspace-relative paths only.
+Each sub-agent receives:
+1. Its role prompt — **copy the relevant section from the Reviewer Prompts section below and paste it directly into the sub-agent's instructions.** Do not ask the sub-agent to read this file.
+2. The filtered diff at `.swarm-review/diff.patch`
+3. Shared context at `.swarm-review/shared-context.txt` (repo name, branch, custom instructions)
 
-Each sub-reviewer writes plain-text findings to `.swarm-review/reports/<name>-findings.md`.
+Each sub-agent writes its findings to `.swarm-review/reports/<name>-findings.md` as plain text.
 
-**Roster by tier — spawn exactly these tasks:**
+**Roster by tier:**
 
 | Reviewer | trivial | lite | full |
 |----------|---------|------|------|
@@ -126,67 +114,21 @@ Each sub-reviewer writes plain-text findings to `.swarm-review/reports/<name>-fi
 | codex | | | ✓ |
 | release | | | ✓ (only when release files touched) |
 
-**Example `subagent` call — prompt inlined, no SKILL.md in reads:**
-
-```js
-await subagent({
-  tasks: [
-    {
-      agent: 'worker',
-      task: `<full text of the Security Reviewer section from this file>
-
-Diff to review: .swarm-review/diff.patch
-Shared context: .swarm-review/shared-context.txt
-Write findings to: .swarm-review/reports/security-findings.md`,
-      reads: ['.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
-      output: '.swarm-review/reports/security-findings.md',
-      cwd: repoRoot,
-    },
-    {
-      agent: 'worker',
-      task: `<full text of the Code Quality Reviewer section from this file>
-
-Diff to review: .swarm-review/diff.patch
-Shared context: .swarm-review/shared-context.txt
-Write findings to: .swarm-review/reports/code-quality-findings.md`,
-      reads: ['.swarm-review/diff.patch', '.swarm-review/shared-context.txt'],
-      output: '.swarm-review/reports/code-quality-findings.md',
-      cwd: repoRoot,
-    },
-    // ... one entry per active reviewer, prompt inlined each time
-  ]
-});
-```
-
 ---
 
 ### Phase 4 — Coordinator Judge Pass
 
-After all sub-reviewer tasks complete, concatenate their output files into `.swarm-review/reports/all-findings.md`, then **call `subagent()` again** for the coordinator. Inline the Coordinator prompt directly into the task string. Do not consolidate findings yourself.
+After all sub-reviewers complete, concatenate their findings into `.swarm-review/reports/all-findings.md`. Then spawn a **separate sub-agent** with the **Coordinator prompt** (see below) to consolidate.
 
-```js
-await subagent({
-  chain: [{
-    agent: 'worker',
-    task: `<full text of the Coordinator section from this file>
-
-Findings: .swarm-review/reports/all-findings.md
-Diff: .swarm-review/diff.patch
-Context: .swarm-review/shared-context.txt
-Write the final review to: review-result.md`,
-    reads: ['.swarm-review/reports/all-findings.md',
-            '.swarm-review/diff.patch',
-            '.swarm-review/shared-context.txt'],
-    output: 'review-result.md',
-    cwd: repoRoot,
-  }]
-});
-```
+Do not consolidate findings yourself. The coordinator sub-agent receives:
+1. The Coordinator prompt — **copy it from the Reviewer Prompts section and paste it directly into the sub-agent's instructions**
+2. The aggregated findings at `.swarm-review/reports/all-findings.md`
+3. The diff at `.swarm-review/diff.patch` and shared context at `.swarm-review/shared-context.txt`
 
 The coordinator:
 
 1. Deduplicates overlapping findings
-2. Re-categorizes misfiled findings  
+2. Re-categorizes misfiled findings
 3. Drops false positives and speculative items
 4. Verifies uncertain findings by reading source code
 5. Produces a final verdict and writes it to `review-result.md` at the repo root
@@ -209,23 +151,26 @@ The `review-result.md` at the repo root is **never deleted** — the user keeps 
 
 ---
 
-## Harness-Specific Orchestration
+### Escape Hatch
 
-The orchestration phases above apply to all harnesses. The only difference is the task-spawning API:
+If a human reviewer comments **"break glass"**, the system forces approval regardless of AI findings. This is tracked in telemetry.
 
-| Harness | Spawn API | Prompt delivery |
-|---------|-----------|----------------|
-| **pi / Copilot CLI** | `subagent({ tasks: [...] })` | Inline the reviewer section into the `task` string. Only diff + shared-context in `reads`. |
-| **Claude Code** | `Task` tool | Paste the reviewer section directly into the Task description. |
-| **opencode** | Task spawning mechanism | Paste the reviewer section directly into the sub-task prompt. |
+---
 
-**In all cases: the orchestrator inlines the prompt. Sub-agents do not read SKILL.md or any external prompt file.**
+### Re-Reviews
+
+When new commits arrive on an already-reviewed branch:
+
+- **Fixed findings** → Omitted from output; corresponding threads auto-resolved
+- **Unfixed findings** → Re-emitted to keep threads alive
+- **User-resolved findings** → Respected unless the issue materially worsened
+- **User replies** — "won't fix" / "acknowledged" → treated as resolved; "I disagree" → coordinator reads justification and either resolves or argues back
 
 ---
 
 ## Reviewer Prompts
 
-The following prompts define each specialist reviewer. The orchestrator pastes the relevant section directly into each sub-agent's task string.
+The following prompts define each specialist reviewer. The orchestrator **copies the relevant section verbatim** into each sub-agent's instructions. Do not make sub-agents read this file to find their own prompt.
 
 ---
 
@@ -494,7 +439,7 @@ Write the final review to `review-result.md`:
 *Generated by swarm-review*
 ```
 
-**Verdict icons:** approved → ✅ | approved_with_comments → ✅ (with comments) | minor_issues → ⚠️ | significant_concerns → 🚫  
+**Verdict icons:** approved → ✅ | approved_with_comments → ✅ (with comments) | minor_issues → ⚠️ | significant_concerns → 🚫
 **Severity icons:** critical → 🔴 **CRITICAL** | warning → 🟡 **WARNING** | suggestion → 🔵 **SUGGESTION**
 
 List only reviewers that actually ran. If there are no findings, write "No issues found. ✨" in the Findings section instead of listing findings.
